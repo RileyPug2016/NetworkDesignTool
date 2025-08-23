@@ -1,0 +1,2523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Network Design Tool</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #cbd5e1; /* Slate 300 */
+        }
+
+        .container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* --- Instructions Bar --- */
+        #instructions-bar {
+            background-color: #1e293b; /* Slate 800 */
+            padding: 0.5rem 1.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            color: #94a3b8; /* Slate 400 */
+            z-index: 20;
+            text-align: center;
+            font-size: 0.875rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 240px 1fr 280px;
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        /* --- Device Palette --- */
+        .device-palette {
+            background-color: #1e293b; /* Slate 800 */
+            padding: 1rem;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            background-color: #334155; /* Slate 700 */
+            border-radius: 0.5rem;
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+            user-select: none;
+            border: 1px solid #475569; /* Slate 600 */
+        }
+        .device-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background-color: #475569; /* Slate 600 */
+        }
+        .device-icon {
+            font-size: 1.2rem;
+            margin-right: 0.6rem;
+            width: 20px;
+            text-align: center;
+        }
+        .device-item[draggable="true"]:active {
+            cursor: grabbing;
+        }
+
+        /* --- Canvas Area --- */
+        .canvas-container {
+            position: relative;
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow: hidden;
+            cursor: default;
+        }
+        .canvas-container.connect-mode, .canvas-container.drawing-mode {
+            cursor: crosshair;
+        }
+         .canvas-container.text-mode {
+            cursor: text;
+        }
+
+        #network-canvas, #temp-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #temp-canvas {
+            z-index: 4; /* Above devices but below packets during animation */
+            pointer-events: none;
+        }
+        .device-node {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 3;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .device-node.selected {
+            border-color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.7);
+            transform: scale(1.1);
+        }
+        .device-node.highlight {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
+            70% { box-shadow: 0 0 10px 10px rgba(56, 189, 248, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+        }
+        /* Device Colors */
+        .device-node.router { background-color: #7c3aed; } /* Violet */
+        .device-node.core-switch { background-color: #db2777; } /* Pink */
+        .device-node.distribution-switch { background-color: #2563eb; } /* Blue */
+        .device-node.access-switch { background-color: #059669; } /* Emerald */
+        .device-node.pc { background-color: #d97706; } /* Amber */
+        .device-node.server { background-color: #64748b; } /* Slate */
+        .device-node.laptop { background-color: #ca8a04; } /* Yellow */
+        .device-node.wap { background-color: #0ea5e9; } /* Sky */
+        .device-node.firewall { background-color: #dc2626; } /* Red */
+        .device-node.ngfw { background-color: #2dd4bf; } /* Teal */
+        .device-node.isp { background-color: #6d28d9; } /* Deep Purple */
+        .device-node.l3-switch { background-color: #be185d; } /* Fuchsia */
+
+
+        .device-node-label {
+            position: absolute;
+            bottom: -18px;
+            font-size: 0.7rem;
+            color: #f1f5f9;
+            white-space: nowrap;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 1);
+            background-color: rgba(15, 23, 42, 0.6);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .device-node-icon {
+            color: #f8fafc;
+            font-size: 1.2rem;
+        }
+        .text-label {
+            position: absolute;
+            z-index: 3;
+            color: #e2e8f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-shadow: 1px 1px 3px rgba(0,0,0,1);
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .text-label.selected {
+            border-color: #38bdf8;
+        }
+
+        /* --- Control/Info Panel --- */
+        .info-panel {
+            background-color: #1e293b;
+            padding: 1rem;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            z-index: 10;
+            overflow-y: auto;
+        }
+        .control-button {
+            background-color: #334155;
+            color: #f1f5f9;
+            font-weight: bold;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s;
+            border: 1px solid #475569;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .control-button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            background-color: #475569;
+        }
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .control-button.active {
+            background-color: #2563eb;
+            border-color: #1d4ed8;
+            color: white;
+        }
+        .control-button.primary {
+            background-color: #2563eb;
+            border-color: #1d4ed8;
+        }
+        .control-button.primary:hover:not(:disabled) {
+            background-color: #1d4ed8;
+        }
+        .control-button.danger {
+            background-color: #be123c;
+            border-color: #9f1239;
+        }
+        .control-button.danger:hover:not(:disabled) {
+            background-color: #9f1239;
+        }
+
+        /* --- Modal --- */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background-color: #1e293b;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+        }
+        .modal-header {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #38bdf8;
+        }
+        .modal-body {
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .modal-body ul {
+            text-align: left;
+            margin: 1rem auto;
+            width: fit-content;
+            padding-left: 1rem;
+        }
+        .modal-body li {
+            margin-top: 0.5rem;
+        }
+        .modal-input {
+             background-color: #334155;
+             border: 1px solid #475569;
+             color: #f1f5f9;
+             padding: 0.5rem;
+             border-radius: 0.375rem;
+             width: 100%;
+        }
+        .rule-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 0 0.25rem;
+        }
+        .rule-btn:hover {
+            color: #e2e8f0;
+        }
+
+        /* --- Info Panel Details --- */
+        #info-content {
+            background-color: #334155;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            font-size: 0.8rem;
+        }
+        #info-content h4 {
+            font-weight: bold;
+            color: #38bdf8;
+            margin-bottom: 0.5rem;
+        }
+        #info-content p, #info-content pre {
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* --- Packet Info --- */
+        #packet-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(15, 23, 42, 0.8);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            z-index: 5;
+            font-size: 0.75rem;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            display: none;
+        }
+        
+        /* --- Tooltip --- */
+        #tooltip {
+            position: fixed;
+            display: none;
+            background-color: rgba(15, 23, 42, 0.9);
+            color: #e2e8f0;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            font-size: 0.8rem;
+            pointer-events: none; /* Important */
+            z-index: 101;
+            max-width: 300px;
+            line-height: 1.5;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+        }
+        #tooltip h5 {
+            font-weight: bold;
+            color: #38bdf8;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 0.25rem;
+        }
+        #tooltip pre {
+            background-color: #0f172a;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        /* --- Event Log --- */
+        #event-log-container.collapsed #log-content {
+            display: none;
+        }
+        #event-log-container.collapsed #toggle-log-btn i {
+            transform: rotate(180deg);
+        }
+        #log-content {
+            font-family: monospace;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Instructions Bar -->
+        <div id="instructions-bar">
+            <strong>How to Use:</strong> 1. Drag devices. | 2. Click <strong>Connect Tool</strong>, then click two devices. | 3. Double-click a link to delete.
+        </div>
+        
+        <div class="main-content">
+            <!-- Device Palette -->
+            <div class="device-palette">
+                <h2 class="text-lg font-bold text-center mb-2 text-white">Device Palette</h2>
+                <div id="pc" class="device-item" draggable="true"><i class="fa-solid fa-desktop device-icon text-amber-400"></i><span>PC</span></div>
+                <div id="laptop" class="device-item" draggable="true"><i class="fa-solid fa-laptop device-icon text-yellow-400"></i><span>Laptop</span></div>
+                <div id="server" class="device-item" draggable="true"><i class="fa-solid fa-database device-icon text-slate-400"></i><span>Server</span></div>
+                <div id="access-switch" class="device-item" draggable="true"><i class="fa-solid fa-network-wired device-icon text-emerald-400"></i><span>Access Switch</span></div>
+                <div id="distribution-switch" class="device-item" draggable="true"><i class="fa-solid fa-server device-icon text-blue-400"></i><span>Dist. Switch</span></div>
+                <div id="core-switch" class="device-item" draggable="true"><i class="fa-solid fa-layer-group device-icon text-pink-400"></i><span>Core Switch</span></div>
+                <div id="router" class="device-item" draggable="true"><i class="fa-solid fa-route device-icon text-violet-400"></i><span>Router</span></div>
+                <div id="firewall" class="device-item" draggable="true"><i class="fa-solid fa-shield-halved device-icon text-red-400"></i><span>Basic Firewall</span></div>
+                <div id="ngfw" class="device-item" draggable="true"><i class="fa-solid fa-shield-virus device-icon text-teal-400"></i><span>NGFW</span></div>
+                <div id="wap" class="device-item" draggable="true"><i class="fa-solid fa-wifi device-icon text-sky-400"></i><span>Wireless AP</span></div>
+                <div id="isp" class="device-item" draggable="true"><i class="fa-solid fa-cloud device-icon text-purple-400"></i><span>ISP Cloud</span></div>
+            </div>
+
+            <!-- Canvas Area -->
+            <div id="canvas-container" class="canvas-container">
+                <canvas id="network-canvas"></canvas>
+                <canvas id="temp-canvas"></canvas>
+                <div id="packet-info"></div>
+                <div id="event-log-container" class="absolute top-0 left-0 w-1/3 max-h-1/2 bg-slate-900/80 backdrop-blur-sm border-b border-r border-slate-700 text-white text-xs shadow-lg transition-all duration-300 rounded-br-lg">
+                    <div id="log-header" class="flex justify-between items-center p-2 bg-slate-800/90 cursor-pointer rounded-br-lg">
+                        <h4 class="font-bold">Event Log</h4>
+                        <div>
+                            <button id="clear-log-btn" class="px-2 py-1 hover:bg-slate-700 rounded"><i class="fa-solid fa-eraser"></i> Clear</button>
+                            <button id="toggle-log-btn" class="px-2 py-1 hover:bg-slate-700 rounded"><i class="fa-solid fa-chevron-up"></i></button>
+                        </div>
+                    </div>
+                    <div id="log-content" class="p-2 h-40 overflow-y-auto">
+                        <!-- Log entries will be added here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control & Info Panel -->
+            <div class="info-panel">
+                <h2 class="text-lg font-bold text-center mb-2 text-white">Controls & Info</h2>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="connect-tool-btn" class="control-button"><i class="fa-solid fa-link"></i>Connect</button>
+                    <button id="delete-device-btn" class="control-button danger"><i class="fa-solid fa-trash-can"></i>Delete</button>
+                </div>
+
+                <div class="mt-2 p-3 bg-[#334155] rounded-lg">
+                    <p class="text-sm font-semibold mb-2 text-center">Packet Simulation</p>
+                    <select id="traffic-type" class="w-full bg-[#1e293b] border border-[#475569] text-white p-2 rounded-md mb-2 text-sm">
+                        <option value="ICMP">Ping (ICMP)</option>
+                        <option value="HTTP">Web (HTTP)</option>
+                        <option value="DNS">DNS (UDP)</option>
+                        <option value="SMTP">SMTP (TCP)</option>
+                        <option value="SMB">SMB (TCP)</option>
+                    </select>
+                    <select id="source-device" class="w-full bg-[#1e293b] border border-[#475569] text-white p-2 rounded-md mb-2 text-sm"></select>
+                    <select id="destination-device" class="w-full bg-[#1e293b] border border-[#475569] text-white p-2 rounded-md mb-2 text-sm"></select>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <button id="send-packet-btn" class="control-button primary w-full"><i class="fa-solid fa-paper-plane"></i>Send</button>
+                        <button id="pause-resume-btn" class="control-button w-full" disabled><i class="fa-solid fa-pause"></i>Pause</button>
+                    </div>
+                </div>
+
+                <div class="mt-2 p-3 bg-[#334155] rounded-lg">
+                    <p class="text-sm font-semibold mb-2 text-center">Annotation Tools</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="draw-shape-btn" class="control-button text-xs"><i class="fa-solid fa-draw-polygon"></i> Draw Shape</button>
+                        <button id="add-text-btn" class="control-button text-xs"><i class="fa-solid fa-font"></i> Add Text</button>
+                    </div>
+                </div>
+                
+                <div class="flex-grow">
+                    <h3 class="text-md font-bold text-center mb-2 text-white">Device Information</h3>
+                    <div id="info-content">
+                        <p class="text-slate-400">Click a device to view its details.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="save-btn" class="control-button"><i class="fa-solid fa-save"></i> Save</button>
+                    <button id="load-btn" class="control-button"><i class="fa-solid fa-folder-open"></i> Load</button>
+                </div>
+                <button id="reset-btn" class="control-button danger mt-2"><i class="fa-solid fa-trash-can"></i>Reset Canvas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div id="modal-header" class="modal-header"></div>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                 <button id="modal-save" class="control-button primary">Save Changes</button>
+                 <button id="modal-close" class="control-button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip"></div>
+    <input type="file" id="file-input" class="hidden" accept=".json">
+
+    <script>
+        // --- Global State & Configuration ---
+        const state = {
+            devices: [],
+            connections: [],
+            annotations: [],
+            texts: [],
+            selectedIds: [],
+            deviceCounter: {},
+            annotationCounter: 0,
+            textCounter: 0,
+            isAnimating: false,
+            isConnectMode: false,
+            isDrawingMode: false,
+            isTextMode: false,
+            actionState: { type: 'none' }, // 'none', 'drawing', 'dragging', 'resizing'
+            wasDragged: false,
+            isPaused: false,
+            resolvePause: null,
+            eventLog: [],
+        };
+
+        const config = {
+            wirelessRange: 150,
+            packetColors: {
+                'ICMP': '#34d399',
+                'HTTP': '#60a5fa',
+                'DNS': '#facc15',
+                'SMTP': '#f472b6',
+                'SMB': '#c084fc',
+                'ARP': '#f472b6',
+            },
+            resizeHandleSize: 8,
+            servicesMap: {
+                'HTTP': 80, 'DNS': 53, 'SMTP': 25, 'POP3': 110,
+                'IMAP': 143, 'LDAP': 389, 'Kerberos': 88, 'SMB': 445, 'NFS': 2049,
+            },
+        };
+        config.portToServiceMap = Object.fromEntries(Object.entries(config.servicesMap).map(([k, v]) => [v, k]));
+
+
+        // --- DOM Element References ---
+        const dom = {
+            canvasContainer: document.getElementById('canvas-container'),
+            canvas: document.getElementById('network-canvas'),
+            ctx: document.getElementById('network-canvas').getContext('2d'),
+            tempCanvas: document.getElementById('temp-canvas'),
+            tempCtx: document.getElementById('temp-canvas').getContext('2d'),
+            paletteItems: document.querySelectorAll('.device-item'),
+            connectToolBtn: document.getElementById('connect-tool-btn'),
+            deleteDeviceBtn: document.getElementById('delete-device-btn'),
+            trafficTypeSelect: document.getElementById('traffic-type'),
+            sendPacketBtn: document.getElementById('send-packet-btn'),
+            pauseResumeBtn: document.getElementById('pause-resume-btn'),
+            drawShapeBtn: document.getElementById('draw-shape-btn'),
+            addTextBtn: document.getElementById('add-text-btn'),
+            resetBtn: document.getElementById('reset-btn'),
+            saveBtn: document.getElementById('save-btn'),
+            loadBtn: document.getElementById('load-btn'),
+            fileInput: document.getElementById('file-input'),
+            sourceDeviceSelect: document.getElementById('source-device'),
+            destinationDeviceSelect: document.getElementById('destination-device'),
+            modal: document.getElementById('modal'),
+            modalHeader: document.getElementById('modal-header'),
+            modalBody: document.getElementById('modal-body'),
+            modalSaveBtn: document.getElementById('modal-save'),
+            modalCloseBtn: document.getElementById('modal-close'),
+            infoContent: document.getElementById('info-content'),
+            packetInfo: document.getElementById('packet-info'),
+            tooltip: document.getElementById('tooltip'),
+            eventLogContainer: document.getElementById('event-log-container'),
+            logHeader: document.getElementById('log-header'),
+            logContent: document.getElementById('log-content'),
+            clearLogBtn: document.getElementById('clear-log-btn'),
+            toggleLogBtn: document.getElementById('toggle-log-btn'),
+        };
+
+        // --- Initial Setup ---
+        window.addEventListener('load', initialize);
+        window.addEventListener('resize', resizeCanvas);
+
+        function initialize() {
+            resizeCanvas();
+            setupEventListeners();
+            createInitialTopology();
+            updateUI();
+        }
+
+        function resizeCanvas() {
+            dom.canvas.width = dom.canvasContainer.clientWidth;
+            dom.canvas.height = dom.canvasContainer.clientHeight;
+            dom.tempCanvas.width = dom.canvasContainer.clientWidth;
+            dom.tempCanvas.height = dom.canvasContainer.clientHeight;
+            draw();
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            // Mouse Events
+            dom.paletteItems.forEach(item => {
+                item.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', e.target.id));
+            });
+            dom.canvasContainer.addEventListener('dragover', e => e.preventDefault());
+            dom.canvasContainer.addEventListener('drop', handleDrop);
+            dom.canvasContainer.addEventListener('mousemove', handleCanvasMouseMove);
+            dom.canvasContainer.addEventListener('mousedown', handleCanvasMouseDown);
+            dom.canvasContainer.addEventListener('mouseup', handleCanvasMouseUp);
+            dom.canvasContainer.addEventListener('click', handleCanvasClick);
+            dom.canvas.addEventListener('dblclick', handleDeleteConnection);
+
+            // Button Events
+            dom.connectToolBtn.addEventListener('click', handleConnectToolToggle);
+            dom.deleteDeviceBtn.addEventListener('click', handleDelete);
+            dom.sendPacketBtn.addEventListener('click', handleSendPacket);
+            dom.pauseResumeBtn.addEventListener('click', handlePauseResume);
+            dom.drawShapeBtn.addEventListener('click', handleDrawShapeToggle);
+            dom.addTextBtn.addEventListener('click', handleAddTextToggle);
+            dom.resetBtn.addEventListener('click', handleReset);
+            dom.saveBtn.addEventListener('click', handleSave);
+            dom.loadBtn.addEventListener('click', () => dom.fileInput.click());
+            dom.fileInput.addEventListener('change', handleLoad);
+            dom.modalCloseBtn.addEventListener('click', closeModal);
+            
+            // Log Events
+            dom.logHeader.addEventListener('click', () => dom.eventLogContainer.classList.toggle('collapsed'));
+            dom.clearLogBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                state.eventLog = [];
+                updateEventLog();
+            });
+        }
+
+        // --- Device & Connection Management ---
+        function addDevice(type, x, y, label = null, configData = {}) {
+            state.deviceCounter[type] = (state.deviceCounter[type] || 0) + 1;
+            const id = `${type}-${state.deviceCounter[type]}`;
+            
+            const newDevice = {
+                id, type, x, y,
+                label: label || id.toUpperCase(),
+                macAddress: generateMacAddress(),
+                ipAddress: `192.168.1.${Object.keys(state.devices).length + 10}`,
+                subnetMask: '255.255.255.0',
+                defaultGateway: '192.168.1.1',
+                macTable: type.includes('switch') ? {} : undefined,
+                arpTable: {},
+                ...configData
+            };
+
+            if (type.includes('switch') && !configData.portConfigs) {
+                newDevice.portConfigs = {};
+                newDevice.vlans = [{ id: 1, name: 'Default' }];
+                if (type === 'distribution-switch' || type === 'core-switch') {
+                    newDevice.vlanInterfaces = [];
+                    newDevice.routingTable = [];
+                }
+            }
+            if (type === 'router' && !configData.portConfigs) {
+                 newDevice.routingTable = [];
+                 newDevice.portConfigs = {};
+                 newDevice.subInterfaces = {};
+                 newDevice.nat = { enabled: false, portForwards: [], translationTable: {} };
+                 delete newDevice.ipAddress;
+                 delete newDevice.subnetMask;
+                 delete newDevice.defaultGateway;
+            }
+            if (type === 'firewall' && !configData.rules) {
+                newDevice.portConfigs = {
+                    'ETH0': { ipAddress: '', subnetMask: '' },
+                    'ETH1': { ipAddress: '', subnetMask: '' }
+                };
+                newDevice.rules = [{ action: 'permit', protocol: 'ANY', source: 'ANY', sourcePort: 'ANY', destination: 'ANY', destinationPort: 'ANY' }];
+                newDevice.stateTable = [];
+            }
+            if (type === 'ngfw' && !configData.portConfigs) {
+                 newDevice.routingTable = [];
+                 newDevice.portConfigs = {};
+                 newDevice.subInterfaces = {};
+                 newDevice.nat = { enabled: false, portForwards: [], translationTable: {} };
+                 newDevice.rules = [{ action: 'permit', protocol: 'ANY', source: 'ANY', sourcePort: 'ANY', destination: 'ANY', destinationPort: 'ANY' }];
+                 newDevice.stateTable = [];
+                 delete newDevice.ipAddress;
+                 delete newDevice.subnetMask;
+                 delete newDevice.defaultGateway;
+            }
+            if (type === 'wap' && !configData.ssid) {
+                newDevice.ssid = `WiFi-${state.deviceCounter[type]}`;
+                newDevice.channel = 6;
+            }
+            if (type === 'laptop' && !configData.ipAddress) {
+                newDevice.ipAddress = '0.0.0.0';
+            }
+            if (type === 'server' && !configData.services) {
+                newDevice.services = [];
+            }
+
+            state.devices.push(newDevice);
+            createDeviceElement(newDevice);
+            return newDevice;
+        }
+
+        function createDeviceElement(device) {
+            const el = document.createElement('div');
+            el.id = device.id;
+            el.className = `device-node ${device.type}`;
+            el.style.left = `${device.x - 25}px`;
+            el.style.top = `${device.y - 25}px`;
+
+            const iconClass = {
+                'router': 'fa-route', 'core-switch': 'fa-layer-group', 'distribution-switch': 'fa-server',
+                'access-switch': 'fa-network-wired', 'pc': 'fa-desktop', 'laptop': 'fa-laptop',
+                'server': 'fa-database', 'wap': 'fa-wifi', 'firewall': 'fa-shield-halved', 'ngfw': 'fa-shield-virus', 'isp': 'fa-cloud'
+            }[device.type];
+
+            el.innerHTML = `<i class="fa-solid ${iconClass} device-node-icon"></i><span class="device-node-label">${device.label}</span>`;
+
+            el.addEventListener('mousedown', e => { e.stopPropagation(); makeDraggable(el, device, e); });
+            el.addEventListener('mouseenter', e => showTooltip(device));
+            el.addEventListener('mouseleave', hideTooltip);
+            el.addEventListener('click', e => { e.stopPropagation(); handleItemClick(device.id); });
+            el.addEventListener('dblclick', () => openConfigModal(device));
+
+
+            dom.canvasContainer.appendChild(el);
+        }
+
+        function addConnection(fromId, toId) {
+            const fromDevice = findDevice(fromId);
+            const toDevice = findDevice(toId);
+            if (!fromDevice || !toDevice || fromId === toId) return;
+            const existing = state.connections.find(c => (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId));
+            if (existing) return;
+
+            const fromPort = getNextAvailablePort(fromDevice);
+            const toPort = getNextAvailablePort(toDevice);
+
+            if (!fromPort || !toPort) {
+                openModal('Connection Error', `A device has no available ports.`);
+                return;
+            }
+
+            state.connections.push({ from: fromId, to: toId, fromPort, toPort });
+            
+            if (fromDevice.portConfigs && !fromDevice.portConfigs[fromPort]) {
+                fromDevice.portConfigs[fromPort] = { mode: 'access', vlan: 1 };
+            }
+            if (toDevice.portConfigs && !toDevice.portConfigs[toPort]) {
+                toDevice.portConfigs[toPort] = { mode: 'access', vlan: 1 };
+            }
+            
+            draw();
+        }
+        
+        function createInitialTopology() {
+            const canvasW = dom.canvas.width;
+            const canvasH = dom.canvas.height;
+
+            const isp = addDevice('isp', canvasW * 0.1, canvasH * 0.5, 'ISP');
+            isp.ipAddress = '203.0.113.1';
+            isp.subnetMask = '255.255.255.0';
+            isp.defaultGateway = '203.0.113.254';
+
+            const router = addDevice('router', canvasW * 0.25, canvasH * 0.5, 'Router-1');
+            
+            const l2Switch = addDevice('access-switch', canvasW * 0.5, canvasH * 0.5, 'Switch-1');
+            
+            const server_smtp = addDevice('server', canvasW * 0.4, canvasH * 0.2, 'SMTP');
+            server_smtp.defaultGateway = '192.168.1.1';
+            const server_dc = addDevice('server', canvasW * 0.5, canvasH * 0.2, 'DC');
+            server_dc.defaultGateway = '192.168.1.1';
+            const server_www = addDevice('server', canvasW * 0.6, canvasH * 0.2, 'WWW');
+            server_www.defaultGateway = '192.168.1.1';
+            const server_file = addDevice('server', canvasW * 0.7, canvasH * 0.2, 'FILE');
+            server_file.defaultGateway = '192.168.1.1';
+            const server_portal = addDevice('server', canvasW * 0.5, canvasH * 0.8, 'PORTAL');
+            server_portal.defaultGateway = '192.168.1.1';
+            
+            const wap = addDevice('wap', canvasW * 0.65, canvasH * 0.8, 'AP-1');
+            wap.defaultGateway = '192.168.1.1';
+
+            const pc1 = addDevice('pc', canvasW * 0.85, canvasH * 0.35, 'PC-1');
+            pc1.defaultGateway = '192.168.1.1';
+            const pc2 = addDevice('pc', canvasW * 0.85, canvasH * 0.45, 'PC-2');
+            pc2.defaultGateway = '192.168.1.1';
+            const pc3 = addDevice('pc', canvasW * 0.85, canvasH * 0.55, 'PC-3');
+            pc3.defaultGateway = '192.168.1.1';
+            const pc4 = addDevice('pc', canvasW * 0.85, canvasH * 0.65, 'PC-4');
+            pc4.defaultGateway = '192.168.1.1';
+
+            addConnection(isp.id, router.id);
+            addConnection(router.id, l2Switch.id);
+            
+            // Configure router interfaces after connections are made
+            const routerToIspConn = findConnection(router.id, isp.id);
+            const ispRouterPort = routerToIspConn.from === router.id ? routerToIspConn.fromPort : routerToIspConn.toPort;
+            router.portConfigs[ispRouterPort] = { mode: 'routed', ipAddress: '203.0.113.2/24' }; 
+
+            const routerToSwitchConn = findConnection(router.id, l2Switch.id);
+            const switchRouterPort = routerToSwitchConn.from === router.id ? routerToSwitchConn.fromPort : routerToSwitchConn.toPort; 
+            const switchToRouterPort = routerToSwitchConn.from === l2Switch.id ? routerToSwitchConn.fromPort : routerToSwitchConn.toPort;
+            
+            router.portConfigs[switchRouterPort] = { mode: 'routed', ipAddress: '192.168.1.1/24' };
+            delete router.subInterfaces[switchRouterPort];
+            
+            l2Switch.portConfigs[switchToRouterPort] = { mode: 'access', vlan: 1 }; 
+            
+            router.routingTable.push({ destination: '0.0.0.0', mask: '0.0.0.0', nextHop: isp.ipAddress });
+
+
+            addConnection(server_smtp.id, l2Switch.id);
+            addConnection(server_dc.id, l2Switch.id);
+            addConnection(server_www.id, l2Switch.id);
+            addConnection(server_file.id, l2Switch.id);
+            addConnection(server_portal.id, l2Switch.id);
+            addConnection(wap.id, l2Switch.id);
+            addConnection(pc1.id, l2Switch.id);
+            addConnection(pc2.id, l2Switch.id);
+            addConnection(pc3.id, l2Switch.id);
+            addConnection(pc4.id, l2Switch.id);
+        }
+
+
+        // --- Event Handlers ---
+        function handleDrop(e) {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            const rect = dom.canvas.getBoundingClientRect();
+            addDevice(type, e.clientX - rect.left, e.clientY - rect.top);
+        }
+
+        function handleCanvasMouseMove(e) {
+            const rect = dom.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            dom.tooltip.style.left = `${e.clientX + 15}px`;
+            dom.tooltip.style.top = `${e.clientY + 15}px`;
+
+            if (state.actionState.type === 'drawing') {
+                const { startX, startY } = state.actionState;
+                dom.tempCtx.clearRect(0, 0, dom.tempCanvas.width, dom.tempCanvas.height);
+                dom.tempCtx.strokeStyle = '#38bdf8';
+                dom.tempCtx.lineWidth = 2;
+                dom.tempCtx.strokeRect(startX, startY, mouseX - startX, mouseY - startY);
+            } else if (state.actionState.type === 'dragging') {
+                state.wasDragged = true;
+                const { item, offsetX, offsetY } = state.actionState;
+                item.x = mouseX - offsetX;
+                item.y = mouseY - offsetY;
+                draw();
+            } else if (state.actionState.type === 'resizing') {
+                state.wasDragged = true;
+                const { item, handle } = state.actionState;
+                const originalX = item.x;
+                const originalY = item.y;
+                const originalWidth = item.width;
+                const originalHeight = item.height;
+
+                if (handle.includes('e')) item.width = mouseX - originalX;
+                if (handle.includes('w')) {
+                    item.width = originalX + originalWidth - mouseX;
+                    item.x = mouseX;
+                }
+                if (handle.includes('s')) item.height = mouseY - originalY;
+                if (handle.includes('n')) {
+                    item.height = originalY + originalHeight - mouseY;
+                    item.y = mouseY;
+                }
+                draw();
+            } else {
+                // Update cursor based on hover
+                const resizeHandle = getResizeHandleAt(mouseX, mouseY);
+                if (resizeHandle) {
+                    dom.canvasContainer.style.cursor = `${resizeHandle}-resize`;
+                } else if (getItemAt(mouseX, mouseY)) {
+                    dom.canvasContainer.style.cursor = 'move';
+                } else if (state.isDrawingMode) {
+                    dom.canvasContainer.style.cursor = 'crosshair';
+                } else if (state.isTextMode) {
+                     dom.canvasContainer.style.cursor = 'text';
+                } else if (state.isConnectMode) {
+                    dom.canvasContainer.style.cursor = 'crosshair';
+                }
+                else {
+                    dom.canvasContainer.style.cursor = 'default';
+                }
+            }
+        }
+        
+        function handleCanvasMouseDown(e) {
+            const rect = dom.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (state.isDrawingMode) {
+                state.actionState = { type: 'drawing', startX: mouseX, startY: mouseY };
+                return;
+            }
+            if (state.isTextMode) {
+                // Let the click event handle text placement
+                return;
+            }
+
+            const resizeHandle = getResizeHandleAt(mouseX, mouseY);
+            const item = getItemAt(mouseX, mouseY);
+
+            if (resizeHandle) {
+                state.actionState = { type: 'resizing', item: findAnnotation(state.selectedIds[0]), handle: resizeHandle };
+            } else if (item && item.type === 'rect') {
+                state.selectedIds = [item.id];
+                state.actionState = {
+                    type: 'dragging',
+                    item: item,
+                    offsetX: mouseX - item.x,
+                    offsetY: mouseY - item.y,
+                };
+            } else if (!item) {
+                 state.selectedIds = [];
+            }
+            updateUI();
+            draw();
+        }
+
+        function handleCanvasMouseUp(e) {
+            if (state.actionState.type === 'drawing') {
+                const rect = dom.canvas.getBoundingClientRect();
+                const endX = e.clientX - rect.left;
+                const endY = e.clientY - rect.top;
+                const { startX, startY } = state.actionState;
+
+                if (Math.abs(endX - startX) > 5 && Math.abs(endY - startY) > 5) {
+                    addAnnotation('rect', Math.min(startX, endX), Math.min(startY, endY), Math.abs(endX - startX), Math.abs(endY - startY));
+                }
+                
+                dom.tempCtx.clearRect(0, 0, dom.tempCanvas.width, dom.tempCanvas.height);
+                draw();
+            }
+            state.actionState = { type: 'none' };
+            setTimeout(() => { state.wasDragged = false; }, 0);
+        }
+
+        function handleCanvasClick(e) {
+            if (state.wasDragged) return;
+
+            if (state.isTextMode) {
+                const text = prompt("Enter text for the label:");
+                if (text) {
+                    const rect = dom.canvas.getBoundingClientRect();
+                    addText(text, e.clientX - rect.left, e.clientY - rect.top);
+                }
+                disableAllModes();
+                updateUI();
+            } else {
+                const rect = dom.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const item = getItemAt(mouseX, mouseY);
+                if (item) {
+                    handleItemClick(item.id);
+                } else if (!findDeviceAt(mouseX, mouseY) && !findTextAt(mouseX, mouseY)) {
+                    state.selectedIds = [];
+                    updateUI();
+                    draw();
+                }
+            }
+        }
+
+
+        function handleConnectToolToggle() {
+            disableAllModes(true);
+            state.isConnectMode = !dom.connectToolBtn.classList.contains('active');
+            updateUI();
+        }
+        
+        function handleDrawShapeToggle() {
+            disableAllModes(true);
+            state.isDrawingMode = !dom.drawShapeBtn.classList.contains('active');
+            updateUI();
+        }
+
+        function handleAddTextToggle() {
+            disableAllModes(true);
+            state.isTextMode = !dom.addTextBtn.classList.contains('active');
+            updateUI();
+        }
+
+        function handleItemClick(itemId) {
+            if (state.wasDragged) return; 
+            
+            if (state.isConnectMode) {
+                if (itemId.startsWith('text-') || itemId.startsWith('annotation-')) return;
+                const index = state.selectedIds.indexOf(itemId);
+                if (index > -1) state.selectedIds.splice(index, 1);
+                else state.selectedIds.push(itemId);
+
+                if (state.selectedIds.length === 2) {
+                    addConnection(state.selectedIds[0], state.selectedIds[1]);
+                    state.selectedIds = [];
+                }
+            } else {
+                state.selectedIds = state.selectedIds.includes(itemId) ? [] : [itemId];
+            }
+            updateUI();
+            draw();
+        }
+
+        function handleDeleteConnection(e) {
+            const rect = dom.canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            let deleted = false;
+            for (let i = state.connections.length - 1; i >= 0; i--) {
+                const conn = state.connections[i];
+                const fromDevice = findDevice(conn.from);
+                const toDevice = findDevice(conn.to);
+                if (fromDevice && toDevice && pointLineDistance(clickX, clickY, fromDevice.x, fromDevice.y, toDevice.x, toDevice.y) < 10) {
+                    state.connections.splice(i, 1);
+                    deleted = true;
+                    break; 
+                }
+            }
+            if (deleted) {
+                draw();
+                updateUI();
+            }
+        }
+        
+        function handleDelete() {
+            if (state.selectedIds.length !== 1) return;
+            const idToDelete = state.selectedIds[0];
+
+            // Try deleting a device
+            const deviceIndex = state.devices.findIndex(d => d.id === idToDelete);
+            if (deviceIndex > -1) {
+                state.devices.splice(deviceIndex, 1);
+                state.connections = state.connections.filter(c => c.from !== idToDelete && c.to !== idToDelete);
+                document.getElementById(idToDelete)?.remove();
+            }
+
+            // Try deleting a text label
+            const textIndex = state.texts.findIndex(t => t.id === idToDelete);
+            if (textIndex > -1) {
+                state.texts.splice(textIndex, 1);
+                document.getElementById(idToDelete)?.remove();
+            }
+            
+            // Try deleting an annotation
+            const annotationIndex = state.annotations.findIndex(a => a.id === idToDelete);
+            if (annotationIndex > -1) {
+                state.annotations.splice(annotationIndex, 1);
+            }
+
+            state.selectedIds = [];
+            draw();
+            updateUI();
+        }
+
+        async function handleSendPacket() {
+            if (state.isAnimating) return;
+            const sourceId = dom.sourceDeviceSelect.value;
+            const destId = dom.destinationDeviceSelect.value;
+            if (!sourceId || !destId || sourceId === destId) {
+                openModal('Packet Error', 'Please select valid and different source/destination devices.');
+                return;
+            }
+            
+            state.isAnimating = true;
+            dom.pauseResumeBtn.disabled = false;
+            state.isPaused = false;
+            updatePauseResumeButton();
+            updateUI();
+
+            const sourceDevice = findDevice(sourceId);
+            const destDevice = findDevice(destId);
+            const trafficType = dom.trafficTypeSelect.value;
+
+            // Clear dynamic and state tables before simulation
+            state.devices.forEach(d => {
+                if(d.macTable) d.macTable = {};
+                if(d.arpTable) d.arpTable = {};
+                if(d.stateTable) d.stateTable = []; // Clear firewall state table
+                if(d.nat) d.nat.translationTable = {}; // Clear NAT translation table
+            });
+            state.eventLog = [];
+            updateEventLog();
+            logEvent(`Initiating packet simulation from ${sourceDevice.label} to ${destDevice.label}...`);
+            updateDeviceInfoPanel();
+
+            // Create initial packet
+            let packet = {
+                l3: { srcIp: sourceDevice.ipAddress, destIp: destDevice.ipAddress },
+                l4: {
+                    srcPort: Math.floor(Math.random() * (65535 - 1024) + 1024) // Random high port for source
+                },
+                l2: { srcMac: sourceDevice.macAddress, destMac: '' },
+                vlanTag: null,
+            };
+
+            switch(trafficType) {
+                case 'HTTP': packet.l4.protocol = 'TCP'; packet.l4.destPort = 80; break;
+                case 'DNS': packet.l4.protocol = 'UDP'; packet.l4.destPort = 53; break;
+                case 'SMTP': packet.l4.protocol = 'TCP'; packet.l4.destPort = 25; break;
+                case 'SMB': packet.l4.protocol = 'TCP'; packet.l4.destPort = 445; break;
+                case 'ICMP': packet.l4.protocol = 'ICMP'; break;
+            }
+            
+            let path;
+            const onSameSubnet = areOnSameSubnet(sourceDevice, destDevice);
+
+            if (onSameSubnet) {
+                // Same subnet, find direct L2 path
+                path = findPath(sourceId, destId);
+            } else {
+                // Different subnets, must route
+                const gatewayRouter = findGatewayRouter(sourceDevice);
+                if (gatewayRouter) {
+                    const path_to_router = findPath(sourceId, gatewayRouter.id);
+                    const path_from_router = findPath(gatewayRouter.id, destId);
+                    if (path_to_router && path_from_router) {
+                        // Combine paths, removing the duplicate router in the middle
+                        path = path_to_router.concat(path_from_router.slice(1));
+                    }
+                }
+            }
+            
+            if (path) {
+                const requestResult = await simulatePacket(path, packet.l4.protocol, packet);
+                if (requestResult === 'permitted') {
+                    let replyPacket = JSON.parse(JSON.stringify(packet));
+                    [replyPacket.l3.srcIp, replyPacket.l3.destIp] = [packet.l3.destIp, packet.l3.srcIp];
+                    [replyPacket.l2.srcMac, replyPacket.l2.destMac] = [packet.l2.destMac, packet.l2.srcMac];
+                    [replyPacket.l4.srcPort, replyPacket.l4.destPort] = [packet.l4.destPort, packet.l4.srcPort];
+                    replyPacket.vlanTag = null; // Reset VLAN tag for the reply
+                    await simulatePacket([...path].reverse(), packet.l4.protocol, replyPacket);
+                }
+            } else {
+                 logEvent(`ERROR: No path found from ${sourceDevice.label} to ${destDevice.label}.`);
+                 openModal('Routing Error', `No path found from ${sourceDevice.label} to ${destDevice.label}. Check VLANs, trunk links, and router/L3 switch configuration.`);
+            }
+
+            state.isAnimating = false;
+            state.isPaused = false;
+            dom.pauseResumeBtn.disabled = true;
+            updatePauseResumeButton();
+            draw();
+            updateUI();
+        }
+        
+        function handlePauseResume() {
+            if (state.isAnimating) {
+                state.isPaused = !state.isPaused;
+                updatePauseResumeButton();
+
+                if (!state.isPaused && state.resolvePause) {
+                    state.resolvePause();
+                    state.resolvePause = null;
+                }
+            }
+        }
+
+        function updatePauseResumeButton() {
+            if (state.isPaused) {
+                dom.pauseResumeBtn.innerHTML = `<i class="fa-solid fa-play"></i>Resume`;
+                dom.pauseResumeBtn.classList.add('primary');
+            } else {
+                dom.pauseResumeBtn.innerHTML = `<i class="fa-solid fa-pause"></i>Pause`;
+                dom.pauseResumeBtn.classList.remove('primary');
+            }
+        }
+
+        function pauseCheck() {
+            if (state.isPaused) {
+                return new Promise(resolve => {
+                    state.resolvePause = resolve;
+                });
+            }
+            return Promise.resolve();
+        }
+
+        function handleReset() {
+            state.devices = [];
+            state.connections = [];
+            state.annotations = [];
+            state.texts = [];
+            state.selectedIds = [];
+            state.deviceCounter = {};
+            state.textCounter = 0;
+            state.annotationCounter = 0;
+            state.isAnimating = false;
+            disableAllModes();
+            dom.canvasContainer.querySelectorAll('.device-node, .text-label').forEach(n => n.remove());
+            createInitialTopology();
+            draw();
+            updateUI();
+        }
+
+        // --- Simulation & Drawing ---
+        async function simulatePacket(path, type, packetData) {
+            for (let i = 0; i < path.length; i++) {
+                const currentNode = path[i];
+                const nextNode = path[i+1];
+
+                if (i === 0) { // At the start
+                    logEvent(`${currentNode.label}: Sending ${type} packet to ${packetData.l3.destIp}.`);
+                    highlightNode(currentNode.id, true);
+                    await new Promise(r => setTimeout(r, 200));
+                }
+
+                if (!nextNode) { // Reached final destination
+                    highlightNode(currentNode.id, true);
+                    logEvent(`${currentNode.label}: Packet received.`);
+                    if (currentNode.type === 'server') {
+                         const servicePort = packetData.l4.destPort;
+                         const requiredService = config.portToServiceMap[servicePort];
+                         if (requiredService && !currentNode.services.includes(requiredService)) {
+                            logEvent(`${currentNode.label}: Connection refused. Service ${requiredService} not running on port ${servicePort}.`);
+                            openModal('Connection Refused', `Packet dropped by ${currentNode.label}. Service not running on port ${servicePort}.`);
+                            await new Promise(r => setTimeout(r, 1500));
+                            highlightNode(currentNode.id, false);
+                            hidePacketInfo();
+                            return 'denied';
+                         }
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                    highlightNode(currentNode.id, false);
+                    hidePacketInfo();
+                    return 'permitted';
+                }
+                
+                packetData.l2.destMac = nextNode.macAddress;
+                showPacketInfo(type, packetData);
+                await animatePacketHop(currentNode, nextNode, type);
+                highlightNode(currentNode.id, false);
+                highlightNode(nextNode.id, true);
+                if (dom.tooltip.style.display === 'block' && dom.tooltip.dataset.deviceId === nextNode.id) {
+                    showTooltip(nextNode);
+                }
+                
+                await pauseCheck();
+
+                // --- LOGIC APPLIED AT THE DESTINATION OF THE HOP (nextNode) ---
+                if (nextNode.type.includes('switch')) {
+                    const conn = findConnection(currentNode.id, nextNode.id);
+                    const incomingPortId = conn.from === nextNode.id ? conn.fromPort : conn.toPort;
+                    const incomingPortConfig = nextNode.portConfigs[incomingPortId] || { mode: 'access', vlan: '1' };
+                    
+                    logEvent(`${nextNode.label}: Received frame on Port ${incomingPortId}. Learning MAC ${packetData.l2.srcMac}.`);
+                    nextNode.macTable[packetData.l2.srcMac] = incomingPortId;
+
+                    if (incomingPortConfig.mode === 'access') {
+                        packetData.vlanTag = incomingPortConfig.vlan;
+                    }
+
+                    const finalHopNode = path[i + 2];
+                    if (finalHopNode) {
+                        const connToNextHop = findConnection(nextNode.id, finalHopNode.id);
+                        const outgoingPortId = connToNextHop.from === nextNode.id ? connToNextHop.fromPort : connToNextHop.toPort;
+                        const outgoingPortConfig = nextNode.portConfigs[outgoingPortId] || { mode: 'access', vlan: '1' };
+
+                        if (outgoingPortConfig.mode === 'access' && packetData.vlanTag != outgoingPortConfig.vlan) {
+                            logEvent(`${nextNode.label}: VLAN Mismatch. Dropping packet.`);
+                            openModal('Packet Dropped', `VLAN Mismatch on ${nextNode.label}. Packet with VLAN tag ${packetData.vlanTag} cannot exit Access Port ${outgoingPortId} (VLAN ${outgoingPortConfig.vlan}).`);
+                            await new Promise(r => setTimeout(r, 2500));
+                            highlightNode(nextNode.id, false);
+                            hidePacketInfo();
+                            return 'denied';
+                        }
+                    }
+                }
+
+                // --- L3 ROUTING & NAT LOGIC ---
+                if (nextNode.type === 'router' || nextNode.type === 'ngfw') {
+                    if (nextNode.nat && nextNode.nat.enabled) {
+                        logEvent(`${nextNode.label}: Applying NAT...`);
+                        handleNat(nextNode, packetData, currentNode);
+                    }
+                    logEvent(`${nextNode.label}: Routing packet towards ${packetData.l3.destIp}.`);
+                    const destSubnet = findSubnetForIpOnRouter(nextNode, packetData.l3.destIp);
+                    if (destSubnet) {
+                        packetData.vlanTag = destSubnet.vlanId;
+                    }
+                } else if (nextNode.type === 'distribution-switch' || nextNode.type === 'core-switch') {
+                     const isRoutingHop = !areOnSameSubnet(findDevice(path[0].id), findDevice(path[path.length - 1].id));
+                     if(isRoutingHop) {
+                        logEvent(`${nextNode.label}: Performing L3 routing...`);
+                        const destVlan = findVlanForIpOnSwitch(nextNode, packetData.l3.destIp);
+                        if (destVlan) {
+                            packetData.vlanTag = destVlan.vlanId;
+                        }
+                     }
+                }
+
+                if (currentNode.arpTable && nextNode.ipAddress) {
+                    currentNode.arpTable[nextNode.ipAddress] = nextNode.macAddress;
+                }
+
+                if (nextNode.type === 'firewall' || nextNode.type === 'ngfw') {
+                    logEvent(`${nextNode.label}: Inspecting packet...`);
+                    const ruleCheck = checkFirewallRules(nextNode, packetData);
+                    if (ruleCheck.action === 'deny') {
+                        const reason = ruleCheck.reason === 'Stateful' ? 'No matching stateful connection found.' : `Packet dropped by ${nextNode.label} due to rule #${ruleCheck.index + 1}.`;
+                        logEvent(`${nextNode.label}: DENIED packet. Reason: ${reason}`);
+                        openModal('Packet Dropped', reason);
+                        await new Promise(r => setTimeout(r, 1500));
+                        highlightNode(nextNode.id, false);
+                        hidePacketInfo();
+                        return 'denied';
+                    } else if (ruleCheck.action === 'permit' && ruleCheck.reason !== 'Stateful') {
+                        logEvent(`${nextNode.label}: PERMITTED packet due to rule #${ruleCheck.index + 1}. Adding to state table.`);
+                        nextNode.stateTable.push({
+                            protocol: packetData.l4.protocol,
+                            srcIp: packetData.l3.srcIp,
+                            srcPort: packetData.l4.srcPort,
+                            destIp: packetData.l3.destIp,
+                            destPort: packetData.l4.destPort,
+                        });
+                    } else if (ruleCheck.action === 'permit' && ruleCheck.reason === 'Stateful') {
+                        logEvent(`${nextNode.label}: PERMITTED packet due to established connection.`);
+                    }
+                }
+            }
+        }
+
+
+        async function animatePacketHop(startNode, endNode, type) {
+            const startX = startNode.x, startY = startNode.y;
+            const endX = endNode.x, endY = endNode.y;
+            const distance = Math.hypot(endX - startX, endY - startY);
+            const steps = Math.max(1, distance / 10);
+            for (let j = 0; j < steps; j++) {
+                await pauseCheck();
+                draw();
+                dom.ctx.fillStyle = config.packetColors[type];
+                dom.ctx.beginPath();
+                dom.ctx.arc(startX + j * (endX - startX) / steps, startY + j * (endY - startY) / steps, 8, 0, Math.PI * 2);
+                dom.ctx.fill();
+                await new Promise(r => setTimeout(r, 800 / steps));
+            }
+        }
+
+        function checkFirewallRules(firewall, packetData) {
+            // 1. Check state table for established connections (return traffic)
+            for (const entry of firewall.stateTable) {
+                const isReturnPacket = entry.protocol === packetData.l4.protocol &&
+                                     entry.srcIp === packetData.l3.destIp &&
+                                     entry.srcPort === packetData.l4.destPort &&
+                                     entry.destIp === packetData.l3.srcIp &&
+                                     entry.destPort === packetData.l4.srcPort;
+                if (isReturnPacket) {
+                    return { action: 'permit', reason: 'Stateful' }; // Allow established traffic
+                }
+            }
+
+            // 2. Check configured rule set
+            for (let i = 0; i < firewall.rules.length; i++) {
+                const rule = firewall.rules[i];
+                const protocolMatch = rule.protocol === 'ANY' || rule.protocol === packetData.l4.protocol || (rule.protocol === 'IP' && ['TCP','UDP','ICMP'].includes(packetData.l4.protocol));
+                const sourceMatch = rule.source === 'ANY' || rule.source === packetData.l3.srcIp || ipIsInSubnet(packetData.l3.srcIp, rule.source);
+                const destMatch = rule.destination === 'ANY' || rule.destination === packetData.l3.destIp || ipIsInSubnet(packetData.l3.destIp, rule.destination);
+                
+                const srcPortMatch = rule.sourcePort === 'ANY' || !packetData.l4.srcPort || rule.sourcePort == packetData.l4.srcPort;
+                const destPortMatch = rule.destinationPort === 'ANY' || !packetData.l4.destPort || rule.destinationPort == packetData.l4.destPort;
+
+                if (protocolMatch && sourceMatch && destMatch && srcPortMatch && destPortMatch) {
+                    return { action: rule.action, index: i }; // First match wins
+                }
+            }
+            return { action: 'deny', index: -1 }; // Implicit deny
+        }
+
+        function draw() {
+            dom.ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+
+            // Draw annotations (shapes) first, so they are in the background
+            state.annotations.forEach(shape => {
+                dom.ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+                dom.ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+                dom.ctx.lineWidth = 2;
+                if (shape.type === 'rect') {
+                    dom.ctx.fillRect(shape.x, shape.y, shape.width, shape.height);
+                    dom.ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+                }
+            });
+
+            // Draw connections
+            state.connections.forEach(conn => {
+                const fromDevice = findDevice(conn.from);
+                const toDevice = findDevice(conn.to);
+                if (!fromDevice || !toDevice) return;
+
+                const isWireless = (fromDevice.type === 'laptop' && toDevice.type === 'wap') || (fromDevice.type === 'wap' && toDevice.type === 'laptop');
+                dom.ctx.beginPath();
+                dom.ctx.moveTo(fromDevice.x, fromDevice.y);
+                dom.ctx.lineTo(toDevice.x, toDevice.y);
+                dom.ctx.strokeStyle = isWireless ? '#38bdf8' : '#475569';
+                dom.ctx.lineWidth = 2.5;
+                dom.ctx.setLineDash(isWireless ? [5, 5] : []);
+                dom.ctx.stroke();
+                
+                dom.ctx.fillStyle = '#94a3b8';
+                dom.ctx.font = '10px Inter';
+                const angle = Math.atan2(toDevice.y - fromDevice.y, toDevice.x - fromDevice.x);
+                const offsetX = Math.sin(angle) * 10;
+                const offsetY = -Math.cos(angle) * 10;
+                
+                const fromLabelPos = { x: fromDevice.x + Math.cos(angle) * 35 + offsetX, y: fromDevice.y + Math.sin(angle) * 35 + offsetY };
+                dom.ctx.fillText(conn.fromPort.replace('Port', ''), fromLabelPos.x, fromLabelPos.y);
+                
+                const toLabelPos = { x: toDevice.x - Math.cos(angle) * 35 + offsetX, y: toDevice.y - Math.sin(angle) * 35 + offsetY };
+                dom.ctx.fillText(conn.toPort.replace('Port', ''), toLabelPos.x, toLabelPos.y);
+            });
+            dom.ctx.setLineDash([]);
+            
+            // Draw resize handles for selected shape
+            if (state.selectedIds.length === 1 && state.selectedIds[0].startsWith('annotation-')) {
+                const shape = findAnnotation(state.selectedIds[0]);
+                if (shape) {
+                    drawResizeHandles(shape);
+                }
+            }
+        }
+
+        // --- UI Updates ---
+        function updateUI() {
+            document.querySelectorAll('.device-node, .text-label').forEach(el => {
+                el.classList.toggle('selected', state.selectedIds.includes(el.id));
+            });
+            dom.connectToolBtn.classList.toggle('active', state.isConnectMode);
+            dom.drawShapeBtn.classList.toggle('active', state.isDrawingMode);
+            dom.addTextBtn.classList.toggle('active', state.isTextMode);
+            
+            dom.canvasContainer.classList.toggle('connect-mode', state.isConnectMode);
+            dom.canvasContainer.classList.toggle('drawing-mode', state.isDrawingMode);
+            dom.canvasContainer.classList.toggle('text-mode', state.isTextMode);
+
+            const sourceEndpoints = state.devices.filter(d => ['pc', 'laptop', 'server'].includes(d.type));
+            const destEndpoints = state.devices.filter(d => ['pc', 'laptop', 'server', 'isp'].includes(d.type));
+            updateSelect(dom.sourceDeviceSelect, sourceEndpoints, 'Select Source');
+            updateSelect(dom.destinationDeviceSelect, destEndpoints, 'Select Destination');
+            dom.sendPacketBtn.disabled = state.isAnimating;
+            dom.deleteDeviceBtn.disabled = state.selectedIds.length !== 1;
+            
+            updateDeviceInfoPanel();
+        }
+
+        function disableAllModes(toggling = false) {
+            if (toggling && (state.isConnectMode || state.isDrawingMode || state.isTextMode)) {
+                // If a tool is already active and we're trying to toggle another, just disable all.
+            }
+            state.isConnectMode = false;
+            state.isDrawingMode = false;
+            state.isTextMode = false;
+            if (!toggling) updateUI();
+        }
+
+        function updateDeviceInfoPanel() {
+            if (!state.isConnectMode && state.selectedIds.length === 1) {
+                const device = findDevice(state.selectedIds[0]);
+                if (!device) {
+                    dom.infoContent.innerHTML = `<p class="text-slate-400">Click a device to view its details.</p>`;
+                    return;
+                };
+                let html = `<h4>${device.label}</h4>`;
+                html += `<p><strong>Type:</strong> ${device.type}</p>`;
+                html += `<p><strong>MAC:</strong> ${device.macAddress}</p>`;
+                if (device.ipAddress) html += `<p><strong>IP:</strong> ${device.ipAddress}</p>`;
+                
+                if (device.services) {
+                    html += `<p><strong>Services:</strong> ${device.services.join(', ') || 'None'}</p>`;
+                }
+
+                if (device.macTable) {
+                    html += `<p class="mt-2"><strong>MAC Table:</strong></p>`;
+                    const macEntries = Object.entries(device.macTable);
+                    if (macEntries.length > 0) {
+                        html += `<pre class="text-xs">${macEntries.map(([mac, port]) => `${mac} -> ${port}`).join('\n')}</pre>`;
+                    } else {
+                        html += `<pre class="text-xs">Empty</pre>`;
+                    }
+                }
+                if (device.arpTable) {
+                    html += `<p class="mt-2"><strong>ARP Table:</strong></p>`;
+                    const arpEntries = Object.entries(device.arpTable);
+                     if (arpEntries.length > 0) {
+                        html += `<pre class="text-xs">${arpEntries.map(([ip, mac]) => `${ip} -> ${mac}`).join('\n')}</pre>`;
+                    } else {
+                        html += `<pre class="text-xs">Empty</pre>`;
+                    }
+                }
+                if (device.stateTable) {
+                    html += `<p class="mt-2"><strong>State Table:</strong></p>`;
+                    if (device.stateTable.length > 0) {
+                        html += `<pre class="text-xs">${device.stateTable.map(s => `${s.protocol} ${s.srcIp}:${s.srcPort} -> ${s.destIp}:${s.destPort}`).join('\n')}</pre>`;
+                    } else {
+                        html += `<pre class="text-xs">Empty</pre>`;
+                    }
+                }
+                if (device.nat && device.nat.translationTable) {
+                    html += `<p class="mt-2"><strong>NAT Table:</strong></p>`;
+                    const natEntries = Object.entries(device.nat.translationTable);
+                    if (natEntries.length > 0) {
+                        html += `<pre class="text-xs">${natEntries.map(([transPort, entry]) => `${entry.originalSrcIp}:${entry.originalSrcPort} -> ${device.label}:${transPort}`).join('\n')}</pre>`;
+                    } else {
+                        html += `<pre class="text-xs">Empty</pre>`;
+                    }
+                }
+
+                html += `<button id="edit-device-btn" class="control-button text-xs py-1 px-2 mt-2 w-full">Edit Config</button>`;
+                dom.infoContent.innerHTML = html;
+                document.getElementById('edit-device-btn').onclick = () => openConfigModal(device);
+            } else {
+                dom.infoContent.innerHTML = `<p class="text-slate-400">Click a device to view its details.</p>`;
+            }
+        }
+
+        function updateSelect(selectEl, items, defaultText) {
+            const currentValue = selectEl.value;
+            selectEl.innerHTML = `<option value="">${defaultText}</option>`;
+            items.forEach(item => {
+                selectEl.innerHTML += `<option value="${item.id}">${item.label}</option>`;
+            });
+            selectEl.value = items.some(item => item.id === currentValue) ? currentValue : "";
+        }
+
+        function showPacketInfo(type, data) {
+            dom.packetInfo.style.display = 'block';
+            let content = `<strong>Type:</strong> ${type}<br>`;
+            if (data.l2) content += `<strong>Src MAC:</strong> ${data.l2.srcMac}<br><strong>Dest MAC:</strong> ${data.l2.destMac}<br>`;
+            if (data.l3) content += `<strong>Src IP:</strong> ${data.l3.srcIp}<br><strong>Dest IP:</strong> ${data.l3.destIp}<br>`;
+            if (data.vlanTag) content += `<strong>VLAN Tag:</strong> ${data.vlanTag}<br>`;
+            if (data.l4 && (data.l4.srcPort || data.l4.destPort)) {
+                content += `<strong>Protocol:</strong> ${data.l4.protocol}`;
+                if (data.l4.srcPort) content += ` | <strong>Src Port:</strong> ${data.l4.srcPort}`;
+                if (data.l4.destPort) content += ` | <strong>Dest Port:</strong> ${data.l4.destPort}`;
+            }
+            dom.packetInfo.innerHTML = content;
+        }
+        function hidePacketInfo() { dom.packetInfo.style.display = 'none'; }
+
+        function highlightNode(nodeId, state) {
+            document.getElementById(nodeId)?.classList.toggle('highlight', state);
+        }
+
+        // --- Tooltip ---
+        function showTooltip(device) {
+            dom.tooltip.dataset.deviceId = device.id;
+            let content = `<h5>${device.label} (${device.type})</h5>`;
+            content += `<strong>IP:</strong> ${device.ipAddress || 'N/A'}<br>`;
+            content += `<strong>MAC:</strong> ${device.macAddress}`;
+
+            if (device.services) {
+                content += `<br><strong>Services:</strong> ${device.services.join(', ') || 'None'}`;
+            }
+            if (device.routingTable && device.routingTable.length > 0) {
+                content += `<br><br><strong>Routing Table:</strong>`;
+                content += `<pre>${device.routingTable.map(r => `${r.destination} -> ${r.nextHop}`).join('\n')}</pre>`;
+            }
+            if (device.subInterfaces) {
+                const subInterfaceEntries = Object.entries(device.subInterfaces).flatMap(([port, subs]) => 
+                    subs.map(sub => `Port ${port}.${sub.vlanId}: ${sub.ip}`)
+                );
+                if (subInterfaceEntries.length > 0) {
+                    content += `<br><br><strong>Sub-interfaces:</strong>`;
+                    content += `<pre>${subInterfaceEntries.join('\n')}</pre>`;
+                }
+            }
+            if (device.arpTable) {
+                content += `<br><br><strong>ARP Table:</strong>`;
+                const arpEntries = Object.entries(device.arpTable);
+                if (arpEntries.length > 0) {
+                    content += `<pre>${arpEntries.map(([ip, mac]) => `${ip} -> ${mac}`).join('\n')}</pre>`;
+                } else {
+                    content += `<pre>Empty</pre>`;
+                }
+            }
+            if (device.macTable) {
+                 content += `<br><br><strong>MAC Table:</strong>`;
+                 const macEntries = Object.entries(device.macTable);
+                 if (macEntries.length > 0) {
+                    content += `<pre>${macEntries.map(([mac, port]) => `${mac} -> ${port}`).join('\n')}</pre>`;
+                 } else {
+                    content += `<pre>Empty</pre>`;
+                 }
+            }
+            if (device.stateTable && device.stateTable.length > 0) {
+                content += `<br><br><strong>State Table:</strong>`;
+                content += `<pre>${device.stateTable.map(s => `${s.protocol} ${s.srcIp}:${s.srcPort} -> ${s.destIp}:${s.destPort}`).join('\n')}</pre>`;
+            }
+            if (device.nat && device.nat.translationTable) {
+                const natEntries = Object.entries(device.nat.translationTable);
+                if (natEntries.length > 0) {
+                    content += `<br><br><strong>NAT Table:</strong>`;
+                    content += `<pre>${natEntries.map(([transPort, entry]) => `${entry.originalSrcIp}:${entry.originalSrcPort} -> ${device.label}:${transPort}`).join('\n')}</pre>`;
+                }
+            }
+            if (device.vlanInterfaces && device.vlanInterfaces.length > 0) {
+                content += `<br><br><strong>VLAN Interfaces (SVI):</strong>`;
+                content += `<pre>${device.vlanInterfaces.map(v => `VLAN ${v.vlanId}: ${v.ipAddress}/${dottedToCidr(v.subnetMask)}`).join('\n')}</pre>`;
+            }
+             if (device.portConfigs) {
+                const portEntries = Object.entries(device.portConfigs);
+                if (portEntries.length > 0) {
+                    content += `<br><br><strong>Port Configs:</strong>`;
+                    content += `<pre>${portEntries.map(([port, config]) => `${port}: ${config.ipAddress || `${config.mode} (VLAN ${config.vlan})`}`).join('\n')}</pre>`;
+                }
+            }
+            if (device.ssid) {
+                content += `<br><strong>SSID:</strong> ${device.ssid}`;
+            }
+            if (device.rules) {
+                content += `<br><br><strong>Firewall Rules:</strong>`;
+                content += `<pre>${device.rules.map(r => `${r.action.toUpperCase()} ${r.protocol} from ${r.source}:${r.sourcePort || 'ANY'} to ${r.destination}:${r.destinationPort || 'ANY'}`).join('\n')}</pre>`;
+            }
+
+            dom.tooltip.innerHTML = content;
+            dom.tooltip.style.display = 'block';
+        }
+
+        function hideTooltip() {
+            dom.tooltip.style.display = 'none';
+            delete dom.tooltip.dataset.deviceId;
+        }
+
+        // --- Modal ---
+        function openConfigModal(device) {
+            dom.modalHeader.textContent = `Configure ${device.label}`;
+            let body = `<div class="space-y-3 text-left">
+                <div><label class="font-semibold">Label:</label><input type="text" id="modal-label" class="modal-input" value="${device.label}"></div>
+                ${device.type !== 'firewall' && device.type !== 'router' && device.type !== 'ngfw' ? `
+                <div><label class="font-semibold">IP Address:</label><input type="text" id="modal-ip" class="modal-input" value="${device.ipAddress}"></div>
+                <div><label class="font-semibold">Subnet Mask:</label><input type="text" id="modal-subnet" class="modal-input" value="${device.subnetMask}"></div>
+                <div><label class="font-semibold">Default Gateway:</label><input type="text" id="modal-gateway" class="modal-input" value="${device.defaultGateway}"></div>
+                ` : ''}
+            </div>`;
+            
+            if (device.type === 'server') {
+                 body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-2 text-left">
+                    <h4 class="font-semibold mb-2">Enabled Services</h4>`;
+                 for(const [service, port] of Object.entries(config.servicesMap)) {
+                    body += `<div class="flex items-center"><input type="checkbox" id="service-${service.toLowerCase()}" class="mr-2 service-checkbox" value="${service}" ${device.services.includes(service) ? 'checked' : ''}><label for="service-${service.toLowerCase()}">${service} (Port ${port})</label></div>`;
+                 }
+                 body += `</div>`;
+            }
+
+            if (device.type === 'firewall' || device.type === 'ngfw') {
+                body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-3 text-left">
+                    <h4 class="font-semibold mb-2">Firewall Rules</h4>
+                    <div id="firewall-rule-list" class="mb-2"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="fw-action" class="modal-input"><option value="permit">Permit</option><option value="deny">Deny</option></select>
+                        <select id="fw-protocol" class="modal-input">
+                            <option>ANY</option><option>IP</option><option>TCP</option><option>UDP</option><option>ICMP</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="fw-source" placeholder="Source (ANY, IP, Net)" class="modal-input">
+                        <input type="text" id="fw-sport" placeholder="Src Port (ANY)" class="modal-input">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input type="text" id="fw-dest" placeholder="Destination (ANY, IP, Net)" class="modal-input">
+                        <input type="text" id="fw-dport" placeholder="Dest Port (ANY)" class="modal-input">
+                    </div>
+                    <button id="add-rule-btn" class="control-button primary w-full mt-2">Add Rule</button>
+                </div>`;
+            }
+
+            if(device.nat) {
+                body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-3 text-left">
+                    <h4 class="font-semibold mb-2">NAT Configuration</h4>
+                    <div class="flex items-center"><input type="checkbox" id="nat-enabled" class="mr-2" ${device.nat.enabled ? 'checked' : ''}><label for="nat-enabled">Enable NAT (SNAT)</label></div>
+                    <h5 class="font-semibold text-sm mt-2">Port Forwarding (DNAT)</h5>
+                    <div id="port-forward-list" class="mb-2"></div>
+                    <div class="grid grid-cols-3 gap-2">
+                         <input type="text" id="pf-external" placeholder="External Port" class="modal-input">
+                         <input type="text" id="pf-internal-ip" placeholder="Internal IP" class="modal-input">
+                         <input type="text" id="pf-internal-port" placeholder="Internal Port" class="modal-input">
+                    </div>
+                     <button id="add-pf-btn" class="control-button primary w-full mt-2">Add Port Forward</button>
+                </div>`;
+            }
+
+            if (device.vlans) {
+                 body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-3 text-left">
+                    <h4 class="font-semibold mb-2">VLAN Configuration</h4>
+                    <div id="vlan-list" class="mb-2"></div>
+                    <div class="flex gap-2">
+                        <input type="number" id="vlan-id" placeholder="ID" class="modal-input w-1/4">
+                        <input type="text" id="vlan-name" placeholder="Name" class="modal-input w-1/2">
+                        ${(device.vlanInterfaces) ? '<input type="text" id="vlan-ip" placeholder="SVI IP/Mask" class="modal-input w-1/2">' : ''}
+                        <button id="add-vlan-btn" class="control-button primary px-3"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                 </div>`;
+            }
+            if(device.portConfigs && (device.type.includes('switch') || device.type === 'router' || device.type === 'ngfw')) {
+                body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-3 text-left">
+                    <h4 class="font-semibold mb-2">Port Configuration</h4>
+                    <div id="port-config-list"></div>
+                </div>`;
+            }
+            if (device.type === 'wap') {
+                body += `<div class="mt-4 pt-4 border-t border-slate-600 space-y-3 text-left">
+                    <div><label class="font-semibold">SSID:</label><input type="text" id="modal-ssid" class="modal-input" value="${device.ssid}"></div>
+                    <div><label class="font-semibold">Channel:</label><input type="number" id="modal-channel" class="modal-input" value="${device.channel}"></div>
+                </div>`;
+            }
+            if (device.type === 'laptop') {
+                body += `<div class="mt-4 pt-4 border-t border-slate-600">
+                    <button id="connect-wifi-btn" class="control-button primary w-full">Connect to Wireless</button>
+                </div>`;
+            }
+            
+            dom.modalBody.innerHTML = body;
+
+            if (device.portConfigs && device.type !== 'firewall') {
+                renderPortConfigs(device);
+            }
+            if (device.type === 'firewall' || device.type === 'ngfw') {
+                renderFirewallRules(device);
+                document.getElementById('add-rule-btn').onclick = () => {
+                    const newRule = {
+                        action: document.getElementById('fw-action').value,
+                        protocol: document.getElementById('fw-protocol').value,
+                        source: document.getElementById('fw-source').value || 'ANY',
+                        sourcePort: document.getElementById('fw-sport').value || 'ANY',
+                        destination: document.getElementById('fw-dest').value || 'ANY',
+                        destinationPort: document.getElementById('fw-dport').value || 'ANY',
+                    };
+                    device.rules.push(newRule);
+                    renderFirewallRules(device);
+                };
+            }
+            if(device.nat) {
+                renderNatConfig(device);
+                document.getElementById('add-pf-btn').onclick = () => {
+                    const newRule = {
+                        externalPort: document.getElementById('pf-external').value,
+                        internalIp: document.getElementById('pf-internal-ip').value,
+                        internalPort: document.getElementById('pf-internal-port').value,
+                    };
+                    if(newRule.externalPort && newRule.internalIp && newRule.internalPort) {
+                        device.nat.portForwards.push(newRule);
+                        renderNatConfig(device);
+                    }
+                };
+            }
+            
+            if (device.vlans) {
+                renderVlans(device);
+                document.getElementById('add-vlan-btn').onclick = () => {
+                    const vlanIdInput = document.getElementById('vlan-id');
+                    const vlanNameInput = document.getElementById('vlan-name');
+                    const vlanIpInput = document.getElementById('vlan-ip');
+
+                    const vlanId = vlanIdInput.value;
+                    const vlanName = vlanNameInput.value;
+                    
+                    if (vlanId && vlanName && !device.vlans.some(v => v.id == vlanId)) {
+                        device.vlans.push({ id: parseInt(vlanId), name: vlanName });
+                        
+                        if (device.vlanInterfaces && vlanIpInput && vlanIpInput.value) {
+                            const [ip, cidrMask] = vlanIpInput.value.split('/');
+                            const subnetMask = cidrToDotted(parseInt(cidrMask, 10));
+                            if(ip && subnetMask) {
+                                device.vlanInterfaces.push({ vlanId: parseInt(vlanId), ipAddress: ip, subnetMask: subnetMask });
+                            }
+                        }
+                        renderVlans(device);
+                        vlanIdInput.value = '';
+                        vlanNameInput.value = '';
+                        if(vlanIpInput) vlanIpInput.value = '';
+                    }
+                };
+            }
+            if (device.type === 'laptop') {
+                document.getElementById('connect-wifi-btn').onclick = () => connectToWifi(device);
+            }
+
+            dom.modalSaveBtn.onclick = () => {
+                device.label = document.getElementById('modal-label').value;
+                if(device.type !== 'firewall' && device.type !== 'router' && device.type !== 'ngfw') {
+                    device.ipAddress = document.getElementById('modal-ip').value;
+                    device.subnetMask = document.getElementById('modal-subnet').value;
+                    device.defaultGateway = document.getElementById('modal-gateway').value;
+                }
+                if (device.type === 'wap') {
+                    device.ssid = document.getElementById('modal-ssid').value;
+                    device.channel = document.getElementById('modal-channel').value;
+                }
+                 if (device.type === 'server') {
+                    device.services = [];
+                    document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+                        device.services.push(cb.value);
+                    });
+                }
+                if (device.type === 'firewall') {
+                    device.portConfigs.ETH0.ipAddress = document.getElementById('fw-eth0').value;
+                    device.portConfigs.ETH1.ipAddress = document.getElementById('fw-eth1').value;
+                }
+                if (device.nat) {
+                    device.nat.enabled = document.getElementById('nat-enabled').checked;
+                }
+                if (device.portConfigs) {
+                     document.querySelectorAll('.port-config-item').forEach(item => {
+                        const portId = item.dataset.portId;
+                        const mode = item.querySelector('.port-mode-select')?.value;
+                        if (device.type === 'router') {
+                            const ipAddress = item.querySelector('.port-ip-input')?.value || '';
+                            device.portConfigs[portId] = { mode, ipAddress };
+                            if (mode === 'routed') delete device.subInterfaces[portId];
+                            else delete device.portConfigs[portId].ipAddress;
+                        } else if (device.type === 'ngfw') {
+                            const ipAddress = item.querySelector('.port-ip-input').value;
+                            device.portConfigs[portId] = { ipAddress };
+                        } else { // Switch
+                            const vlan = item.querySelector('.port-vlan-input').value;
+                            device.portConfigs[portId] = { mode, vlan };
+                        }
+                    });
+                }
+                const deviceEl = document.getElementById(device.id);
+                if (deviceEl) {
+                    deviceEl.querySelector('.device-node-label').textContent = device.label;
+                }
+                updateUI();
+                closeModal();
+            };
+            dom.modal.style.display = 'flex';
+        }
+
+        function renderVlans(device) {
+            const container = document.getElementById('vlan-list');
+            let html = '';
+            device.vlans.forEach(vlan => {
+                const svi = device.vlanInterfaces?.find(i => i.vlanId === vlan.id);
+                html += `<div class="flex items-center text-xs bg-slate-700 p-1 rounded mb-1">
+                    <span class="flex-grow">VLAN ${vlan.id}: ${vlan.name} ${svi ? `(${svi.ipAddress}/${dottedToCidr(svi.subnetMask)})` : ''}</span>
+                    <button class="rule-btn text-red-400 delete-vlan-btn" data-vlan-id="${vlan.id}" ${vlan.id === 1 ? 'disabled' : ''}><i class="fa-solid fa-times"></i></button>
+                </div>`;
+            });
+            container.innerHTML = html || '<p class="text-xs text-slate-400 text-center">No VLANs defined.</p>';
+
+            // Add event listeners for the new delete buttons
+            container.querySelectorAll('.delete-vlan-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const vlanIdToDelete = parseInt(btn.dataset.vlanId, 10);
+                    
+                    // Remove VLAN from vlans array
+                    const vlanIndex = device.vlans.findIndex(v => v.id === vlanIdToDelete);
+                    if (vlanIndex > -1) {
+                        device.vlans.splice(vlanIndex, 1);
+                    }
+
+                    // Remove associated SVI if it exists
+                    if (device.vlanInterfaces) {
+                        const sviIndex = device.vlanInterfaces.findIndex(i => i.vlanId === vlanIdToDelete);
+                        if (sviIndex > -1) {
+                            device.vlanInterfaces.splice(sviIndex, 1);
+                        }
+                    }
+                    
+                    // Re-render the VLAN list
+                    renderVlans(device);
+                };
+            });
+        }
+
+        function renderPortConfigs(device) {
+            const container = document.getElementById('port-config-list');
+            let html = '';
+            state.connections.filter(c => c.from === device.id || c.to === device.id).forEach(conn => {
+                const portId = conn.from === device.id ? conn.fromPort : conn.toPort;
+                const neighbor = conn.from === device.id ? findDevice(conn.to) : findDevice(conn.from);
+                const config = device.portConfigs[portId] || { mode: 'access', vlan: 1 };
+                
+                if (device.type === 'router') {
+                    html += `<div class="bg-slate-800 p-3 rounded-lg mb-3 port-config-item" data-port-id="${portId}">
+                        <h5 class="font-bold text-slate-300 mb-2">Port ${portId} (to ${neighbor.label})</h5>
+                        <div class="grid grid-cols-2 gap-2 items-center">
+                            <label>Mode:</label>
+                            <select class="modal-input port-mode-select">
+                                <option value="routed" ${config.mode === 'routed' ? 'selected' : ''}>Routed</option>
+                                <option value="trunk" ${config.mode === 'trunk' ? 'selected' : ''}>Trunk</option>
+                            </select>
+                        </div>
+                        <div class="routed-config-div mt-2" style="display: ${config.mode === 'routed' ? 'block' : 'none'};">
+                            <label>IP Address/Mask:</label>
+                            <input type="text" class="modal-input port-ip-input" placeholder="e.g., 10.1.1.1/24" value="${config.ipAddress || ''}">
+                        </div>
+                        <div class="trunk-config-div mt-2" style="display: ${config.mode === 'trunk' ? 'block' : 'none'};">
+                            <h6 class="font-semibold text-sm">Sub-interfaces</h6>
+                            <div id="sub-interface-list-${portId}"></div>
+                            <div class="flex gap-2 mt-2">
+                                <input type="number" class="modal-input w-1/4" placeholder="VLAN ID" id="sub-vlan-${portId}">
+                                <input type="text" class="modal-input w-1/2" placeholder="IP/Mask" id="sub-ip-${portId}">
+                                <button class="control-button primary px-3 add-sub-btn" data-port-id="${portId}"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                        </div>
+                    </div>`;
+                } else if (device.type === 'ngfw') {
+                     html += `<div class="bg-slate-800 p-3 rounded-lg mb-3 port-config-item" data-port-id="${portId}">
+                        <h5 class="font-bold text-slate-300 mb-2">Port ${portId} (to ${neighbor.label})</h5>
+                        <div>
+                            <label>IP Address/Mask:</label>
+                            <input type="text" class="modal-input port-ip-input" placeholder="e.g., 10.1.1.1/24" value="${config.ipAddress || ''}">
+                        </div>
+                    </div>`;
+                } else { // Switches
+                    html += `
+                        <div class="grid grid-cols-3 gap-2 items-center mb-2 port-config-item" data-port-id="${portId}">
+                            <label>${portId} (${neighbor.label}):</label>
+                            <select class="modal-input port-mode-select">
+                                <option value="access" ${config.mode === 'access' ? 'selected' : ''}>Access</option>
+                                <option value="trunk" ${config.mode === 'trunk' ? 'selected' : ''}>Trunk</option>
+                            </select>
+                            <input type="text" class="modal-input port-vlan-input" placeholder="VLAN(s)" value="${config.vlan || ''}">
+                        </div>
+                    `;
+                }
+            });
+            container.innerHTML = html || '<p class="text-slate-400 text-sm">No physical connections to configure.</p>';
+
+            if (device.type === 'router') {
+                renderSubInterfaces(device);
+                container.querySelectorAll('.port-mode-select').forEach(sel => {
+                    sel.onchange = (e) => {
+                        const portItem = e.target.closest('.port-config-item');
+                        const routedDiv = portItem.querySelector('.routed-config-div');
+                        const trunkDiv = portItem.querySelector('.trunk-config-div');
+                        if (e.target.value === 'routed') {
+                            routedDiv.style.display = 'block';
+                            trunkDiv.style.display = 'none';
+                        } else {
+                            routedDiv.style.display = 'none';
+                            trunkDiv.style.display = 'block';
+                        }
+                    };
+                });
+                container.querySelectorAll('.add-sub-btn').forEach(btn => {
+                    btn.onclick = () => {
+                        const portId = btn.dataset.portId;
+                        const vlanId = document.getElementById(`sub-vlan-${portId}`).value;
+                        const ip = document.getElementById(`sub-ip-${portId}`).value;
+                        if (!vlanId || !ip) return;
+
+                        if (!device.subInterfaces[portId]) device.subInterfaces[portId] = [];
+                        device.subInterfaces[portId].push({ vlanId, ip });
+                        renderSubInterfaces(device);
+                        document.getElementById(`sub-vlan-${portId}`).value = '';
+                        document.getElementById(`sub-ip-${portId}`).value = '';
+                    };
+                });
+            }
+        }
+
+        function renderSubInterfaces(router) {
+            Object.keys(router.subInterfaces).forEach(portId => {
+                const listEl = document.getElementById(`sub-interface-list-${portId}`);
+                if (!listEl) return;
+                let subHtml = '';
+                if (router.subInterfaces[portId] && router.subInterfaces[portId].length > 0) {
+                    router.subInterfaces[portId].forEach((sub, index) => {
+                        subHtml += `<div class="flex items-center text-xs bg-slate-700 p-1 rounded mb-1">
+                            <span class="flex-grow">VLAN ${sub.vlanId}: ${sub.ip}</span>
+                            <button class="rule-btn text-red-400 delete-sub-btn" data-port-id="${portId}" data-index="${index}"><i class="fa-solid fa-times"></i></button>
+                        </div>`;
+                    });
+                } else {
+                    subHtml = '<p class="text-xs text-slate-400 text-center">No sub-interfaces.</p>';
+                }
+                listEl.innerHTML = subHtml;
+            });
+
+            document.querySelectorAll('.delete-sub-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const portId = btn.dataset.portId;
+                    const index = btn.dataset.index;
+                    router.subInterfaces[portId].splice(index, 1);
+                    renderSubInterfaces(router);
+                }
+            });
+        }
+
+
+        function renderFirewallRules(device) {
+            const container = document.getElementById('firewall-rule-list');
+            let html = '<div class="bg-slate-800 p-2 rounded space-y-1">';
+            if (device.rules.length === 0) {
+                html += '<p class="text-slate-400 text-sm text-center">No rules defined.</p>';
+            } else {
+                device.rules.forEach((r, i) => {
+                    html += `<div class="flex items-center text-xs">
+                        <span class="flex-grow">${i + 1}. ${r.action.toUpperCase()} ${r.protocol} ${r.source}:${r.sourcePort || 'ANY'} -> ${r.destination}:${r.destinationPort || 'ANY'}</span>
+                        <button class="rule-btn" data-index="${i}" data-action="up" ${i === 0 ? 'disabled' : ''}><i class="fa-solid fa-arrow-up"></i></button>
+                        <button class="rule-btn" data-index="${i}" data-action="down" ${i === device.rules.length - 1 ? 'disabled' : ''}><i class="fa-solid fa-arrow-down"></i></button>
+                        <button class="rule-btn text-red-400" data-index="${i}" data-action="delete"><i class="fa-solid fa-times"></i></button>
+                    </div>`;
+                });
+            }
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.rule-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const index = parseInt(e.currentTarget.dataset.index);
+                    const action = e.currentTarget.dataset.action;
+                    if (action === 'up' && index > 0) {
+                        [device.rules[index], device.rules[index - 1]] = [device.rules[index - 1], device.rules[index]];
+                    } else if (action === 'down' && index < device.rules.length - 1) {
+                        [device.rules[index], device.rules[index + 1]] = [device.rules[index + 1], device.rules[index]];
+                    } else if (action === 'delete') {
+                        device.rules.splice(index, 1);
+                    }
+                    renderFirewallRules(device);
+                };
+            });
+        }
+
+        function renderNatConfig(router) {
+            const container = document.getElementById('port-forward-list');
+            let html = '<div class="bg-slate-800 p-2 rounded space-y-1">';
+            if (router.nat.portForwards.length === 0) {
+                html += '<p class="text-slate-400 text-sm text-center">No port forwarding rules.</p>';
+            } else {
+                router.nat.portForwards.forEach((r, i) => {
+                    html += `<div class="flex items-center text-xs">
+                        <span class="flex-grow">${r.externalPort} -> ${r.internalIp}:${r.internalPort}</span>
+                        <button class="rule-btn text-red-400 delete-pf-btn" data-index="${i}"><i class="fa-solid fa-times"></i></button>
+                    </div>`;
+                });
+            }
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.delete-pf-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const index = parseInt(e.currentTarget.dataset.index);
+                    router.nat.portForwards.splice(index, 1);
+                    renderNatConfig(router);
+                };
+            });
+        }
+
+        function connectToWifi(laptop) {
+            state.connections = state.connections.filter(link => {
+                const from = findDevice(link.from);
+                const to = findDevice(link.to);
+                return !((from.id === laptop.id && to.type === 'wap') || (to.id === laptop.id && from.type === 'wap'));
+            });
+
+            let nearestWap = null;
+            let minDistance = config.wirelessRange;
+            state.devices.filter(d => d.type === 'wap').forEach(wap => {
+                const dist = Math.hypot(laptop.x - wap.x, laptop.y - wap.y);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestWap = wap;
+                }
+            });
+
+            if (nearestWap) {
+                const lastOctet = Math.floor(Math.random() * (254 - 100 + 1) + 100);
+                laptop.ipAddress = `192.168.1.${lastOctet}`;
+                laptop.subnetMask = '255.255.255.0';
+                laptop.defaultGateway = '192.168.1.1';
+                addConnection(laptop.id, nearestWap.id);
+            }
+            draw();
+            closeModal();
+        }
+
+        function openModal(header, body) {
+            dom.modalHeader.innerHTML = header;
+            dom.modalBody.innerHTML = body;
+            dom.modalSaveBtn.style.display = 'none';
+            dom.modal.style.display = 'flex';
+        }
+        function closeModal() {
+            dom.modal.style.display = 'none';
+            dom.modalSaveBtn.style.display = 'inline-flex';
+        }
+
+        // --- Utility Functions ---
+        function findDevice(id) { return state.devices.find(d => d.id === id); }
+        function findText(id) { return state.texts.find(t => t.id === id); }
+        function findAnnotation(id) { return state.annotations.find(a => a.id === id); }
+        function findConnection(id1, id2) { return state.connections.find(c => (c.from === id1 && c.to === id2) || (c.from === id2 && c.to === id1)); }
+        function getNextAvailablePort(device) {
+            const usedPorts = state.connections.flatMap(c => {
+                if (c.from === device.id) return [c.fromPort];
+                if (c.to === device.id) return [c.toPort];
+                return [];
+            });
+
+            if (device.type === 'firewall') {
+                if (!usedPorts.includes('ETH0')) return 'ETH0';
+                if (!usedPorts.includes('ETH1')) return 'ETH1';
+                return null; // No ports available
+            } else {
+                let i = 1;
+                while (true) {
+                    const portName = `${i}`;
+                    if (!usedPorts.includes(portName)) return portName;
+                    i++;
+                }
+            }
+        }
+        function generateMacAddress() { return 'XX:XX:XX:XX:XX:XX'.replace(/X/g, () => "0123456789ABCDEF".charAt(Math.floor(Math.random() * 16))); }
+        function makeDraggable(el, item, initialEvent) {
+            let offsetX = initialEvent.clientX - el.getBoundingClientRect().left;
+            let offsetY = initialEvent.clientY - el.getBoundingClientRect().top;
+            el.style.cursor = 'grabbing';
+            el.style.zIndex = '10';
+
+            function onMouseMove(e) {
+                state.wasDragged = true; 
+                const rect = dom.canvasContainer.getBoundingClientRect();
+                let newX = e.clientX - rect.left;
+                let newY = e.clientY - rect.top;
+                
+                if (item.type) { // It's a device
+                    item.x = newX - offsetX + (el.offsetWidth / 2);
+                    item.y = newY - offsetY + (el.offsetHeight / 2);
+                    el.style.left = `${item.x - (el.offsetWidth / 2)}px`;
+                    el.style.top = `${item.y - (el.offsetHeight / 2)}px`;
+                    draw();
+                } else { // It's a text label
+                    item.x = newX - offsetX;
+                    item.y = newY - offsetY;
+                    el.style.left = `${item.x}px`;
+                    el.style.top = `${item.y}px`;
+                }
+            }
+
+            function onMouseUp() {
+                el.style.cursor = 'pointer';
+                el.style.zIndex = '3';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                setTimeout(() => { state.wasDragged = false; }, 0);
+            }
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        }
+        function findPath(startId, endId) {
+            const queue = [[findDevice(startId)]];
+            const visited = new Set([startId]);
+
+            while (queue.length > 0) {
+                const path = queue.shift();
+                const lastNode = path[path.length - 1];
+                if (lastNode.id === endId) return path;
+                for (const neighbor of getNeighbors(lastNode.id)) {
+                    if (!visited.has(neighbor.id)) {
+                        visited.add(neighbor.id);
+                        queue.push([...path, neighbor]);
+                    }
+                }
+            }
+            return null;
+        }
+        function getNeighbors(deviceId) {
+            const neighbors = [];
+            state.connections.forEach(c => {
+                if (c.from === deviceId) neighbors.push(findDevice(c.to));
+                else if (c.to === deviceId) neighbors.push(findDevice(c.from));
+            });
+            return neighbors.filter(Boolean);
+        }
+        function pointLineDistance(px, py, x1, y1, x2, y2) {
+            const dx = x2 - x1, dy = y2 - y1;
+            if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+            const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+            return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+        }
+        function ipToLong(ip) {
+            if(!ip) return 0;
+            return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+        }
+
+        function ipIsInSubnet(ip, subnet) {
+            if (!ip || !subnet || !subnet.includes('/')) return false;
+            const [subnetAddr, prefix] = subnet.split('/');
+            const ipLong = ipToLong(ip);
+            const subnetLong = ipToLong(subnetAddr);
+            const mask = (-1 << (32 - parseInt(prefix))) >>> 0;
+            return (ipLong & mask) === (subnetLong & mask);
+        }
+        function areOnSameSubnet(device1, device2) {
+            if (!device1.ipAddress || !device1.subnetMask || !device2.ipAddress || !device2.subnetMask) {
+                return false;
+            }
+            const ip1Long = ipToLong(device1.ipAddress);
+            const mask1Long = ipToLong(device1.subnetMask);
+            const net1 = ip1Long & mask1Long;
+
+            const ip2Long = ipToLong(device2.ipAddress);
+            const net2 = ip2Long & mask1Long; // Use the source device's mask to check
+
+            return net1 === net2;
+        }
+        function findGatewayRouter(sourceDevice) {
+            const gatewayIp = sourceDevice.defaultGateway;
+            if (!gatewayIp) return null;
+
+            for (const device of state.devices) {
+                if (device.type === 'router' || device.type === 'ngfw') {
+                    // Check routed physical interfaces
+                    for (const port in device.portConfigs) {
+                        const config = device.portConfigs[port];
+                        const isRoutablePort = (device.type === 'router' && config.mode === 'routed' && config.ipAddress) || (device.type === 'ngfw' && config.ipAddress);
+                        if (isRoutablePort && config.ipAddress.startsWith(gatewayIp + '/')) {
+                            return device;
+                        }
+                    }
+                    // Check sub-interfaces
+                    if (device.subInterfaces) {
+                        for (const port in device.subInterfaces) {
+                            for (const sub of device.subInterfaces[port]) {
+                                if (sub.ip.startsWith(gatewayIp + '/')) {
+                                    return device;
+                                }
+                            }
+                        }
+                    }
+                }
+                if ((device.type === 'distribution-switch' || device.type === 'core-switch') && device.vlanInterfaces) {
+                    for (const svi of device.vlanInterfaces) {
+                        if (svi.ipAddress === gatewayIp) {
+                            return device;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+        function findSubnetForIpOnRouter(router, targetIp) {
+            if (!router.subInterfaces) return null;
+            for (const port in router.subInterfaces) {
+                for (const sub of router.subInterfaces[port]) {
+                    if (ipIsInSubnet(targetIp, sub.ip)) {
+                        return sub;
+                    }
+                }
+            }
+            return null;
+        }
+        function findVlanForIpOnSwitch(l3Switch, targetIp) {
+            if (!l3Switch.vlanInterfaces) return null;
+            for (const svi of l3Switch.vlanInterfaces) {
+                const cidr = dottedToCidr(svi.subnetMask);
+                if(cidr && ipIsInSubnet(targetIp, `${svi.ipAddress}/${cidr}`)) {
+                    return svi;
+                }
+            }
+            return null;
+        }
+        function dottedToCidr(mask) {
+            if (!mask || !/^\d{1,3}(\.\d{1,3}){3}$/.test(mask)) return null;
+            const ones = mask.split('.').reduce((acc, octet) => acc + (octet >>> 0).toString(2).padStart(8, '0'), '').split('1').length - 1;
+            return ones;
+        }
+        function cidrToDotted(cidr) {
+            if (isNaN(cidr) || cidr < 0 || cidr > 32) return null;
+            const mask = (0xFFFFFFFF << (32 - cidr)) >>> 0;
+            return `${(mask >>> 24)}.${(mask >> 16 & 255)}.${(mask >> 8 & 255)}.${(mask & 255)}`;
+        }
+
+        // --- Annotation Functions ---
+        function addText(content, x, y) {
+            state.textCounter++;
+            const id = `text-${state.textCounter}`;
+            const newText = { id, content, x, y };
+            state.texts.push(newText);
+            
+            const el = document.createElement('div');
+            el.id = id;
+            el.className = 'text-label';
+            el.textContent = content;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            el.addEventListener('click', e => { e.stopPropagation(); handleItemClick(id); });
+            el.addEventListener('mousedown', e => { e.stopPropagation(); makeDraggable(el, newText, e); });
+            
+            dom.canvasContainer.appendChild(el);
+        }
+        
+        function addAnnotation(type, x, y, width, height) {
+            state.annotationCounter++;
+            const id = `annotation-${state.annotationCounter}`;
+            const newAnnotation = { id, type, x, y, width, height, color: '#38bdf8' };
+            state.annotations.push(newAnnotation);
+        }
+
+        function getItemAt(x, y) {
+            // Check annotations in reverse order (top-most first)
+            for (let i = state.annotations.length - 1; i >= 0; i--) {
+                const shape = state.annotations[i];
+                if (x >= shape.x && x <= shape.x + shape.width && y >= shape.y && y <= shape.y + shape.height) {
+                    return shape;
+                }
+            }
+            return null;
+        }
+        
+        function findDeviceAt(x, y) {
+            for (const device of state.devices) {
+                const dist = Math.hypot(x - device.x, y - device.y);
+                if (dist <= 25) return device;
+            }
+            return null;
+        }
+
+        function findTextAt(x, y) {
+            for (const text of state.texts) {
+                const el = document.getElementById(text.id);
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    const canvasRect = dom.canvasContainer.getBoundingClientRect();
+                    if (x >= rect.left - canvasRect.left && x <= rect.right - canvasRect.left &&
+                        y >= rect.top - canvasRect.top && y <= rect.bottom - canvasRect.top) {
+                        return text;
+                    }
+                }
+            }
+            return null;
+        }
+
+
+        function getResizeHandles(shape) {
+            const { x, y, width, height } = shape;
+            const h = config.resizeHandleSize / 2;
+            return {
+                nw: { x: x - h, y: y - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                n:  { x: x + width / 2 - h, y: y - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                ne: { x: x + width - h, y: y - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                e:  { x: x + width - h, y: y + height / 2 - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                se: { x: x + width - h, y: y + height - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                s:  { x: x + width / 2 - h, y: y + height - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                sw: { x: x - h, y: y + height - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+                w:  { x: x - h, y: y + height / 2 - h, width: config.resizeHandleSize, height: config.resizeHandleSize },
+            };
+        }
+
+        function drawResizeHandles(shape) {
+            const handles = getResizeHandles(shape);
+            dom.ctx.fillStyle = '#f1f5f9';
+            for (const key in handles) {
+                const handle = handles[key];
+                dom.ctx.fillRect(handle.x, handle.y, handle.width, handle.height);
+            }
+        }
+        
+        function getResizeHandleAt(x, y) {
+            if (state.selectedIds.length !== 1 || !state.selectedIds[0].startsWith('annotation-')) {
+                return null;
+            }
+            const shape = findAnnotation(state.selectedIds[0]);
+            if (!shape) return null;
+
+            const handles = getResizeHandles(shape);
+            for (const key in handles) {
+                const handle = handles[key];
+                if (x >= handle.x && x <= handle.x + handle.width && y >= handle.y && y <= handle.y + handle.height) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        // --- Save/Load Functions ---
+        function handleSave() {
+            let fileName = prompt("Enter a filename for your topology:", "network-topology.json");
+
+            if (!fileName) {
+                return; // User cancelled
+            }
+
+            if (!fileName.toLowerCase().endsWith('.json')) {
+                fileName += '.json';
+            }
+
+            const saveData = {
+                devices: state.devices,
+                connections: state.connections,
+                annotations: state.annotations,
+                texts: state.texts,
+                deviceCounter: state.deviceCounter,
+                annotationCounter: state.annotationCounter,
+                textCounter: state.textCounter
+            };
+            const dataStr = JSON.stringify(saveData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: "application/json"});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function handleLoad(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const loadedData = JSON.parse(e.target.result);
+                    
+                    // Clear current state
+                    handleReset(); // Use reset to clear most things
+                    state.devices = []; // Ensure devices are cleared before reloading
+                    dom.canvasContainer.querySelectorAll('.device-node, .text-label').forEach(n => n.remove());
+
+
+                    // Load new state
+                    state.deviceCounter = loadedData.deviceCounter || {};
+                    state.annotationCounter = loadedData.annotationCounter || 0;
+                    state.textCounter = loadedData.textCounter || 0;
+
+                    loadedData.devices.forEach(d => {
+                        // Pass the full device object as config to preserve all its properties
+                        addDevice(d.type, d.x, d.y, d.label, d);
+                    });
+                    
+                    state.connections = loadedData.connections || [];
+                    state.annotations = loadedData.annotations || [];
+                    state.texts = loadedData.texts || [];
+
+                    // Re-create text elements
+                    state.texts.forEach(t => {
+                        const el = document.createElement('div');
+                        el.id = t.id;
+                        el.className = 'text-label';
+                        el.textContent = t.content;
+                        el.style.left = `${t.x}px`;
+                        el.style.top = `${t.y}px`;
+                        el.addEventListener('click', e => { e.stopPropagation(); handleItemClick(t.id); });
+                        el.addEventListener('mousedown', e => { e.stopPropagation(); makeDraggable(el, t, e); });
+                        dom.canvasContainer.appendChild(el);
+                    });
+
+                    draw();
+                    updateUI();
+
+                } catch (error) {
+                    console.error("Error loading or parsing file:", error);
+                    openModal('Load Error', 'Could not load the topology file. It may be corrupted or in the wrong format.');
+                }
+            };
+            reader.readAsText(file);
+            dom.fileInput.value = ''; // Reset input so the same file can be loaded again
+        }
+
+        // --- NAT Logic ---
+        function handleNat(router, packetData, ingressNode) {
+            const isInternal = (ip) => ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.');
+            const externalInterface = getExternalInterface(router);
+            if (!externalInterface) return;
+
+            const isOutbound = isInternal(packetData.l3.srcIp) && !isInternal(packetData.l3.destIp);
+            const isInbound = !isInternal(packetData.l3.srcIp) && packetData.l3.destIp === externalInterface.ip;
+
+            if (isOutbound) {
+                // SNAT: Source NAT for outgoing traffic
+                const translatedPort = Math.floor(Math.random() * (65535 - 1024) + 1024);
+                router.nat.translationTable[translatedPort] = {
+                    originalSrcIp: packetData.l3.srcIp,
+                    originalSrcPort: packetData.l4.srcPort,
+                };
+                packetData.l3.srcIp = externalInterface.ip;
+                packetData.l4.srcPort = translatedPort;
+
+            } else if (isInbound) {
+                // Check for return traffic first
+                const translationEntry = router.nat.translationTable[packetData.l4.destPort];
+                if (translationEntry) {
+                    // It's return traffic for an established session
+                    packetData.l3.destIp = translationEntry.originalSrcIp;
+                    packetData.l4.destPort = translationEntry.originalSrcPort;
+                } else {
+                    // DNAT: Check for port forwarding rules
+                    const pfRule = router.nat.portForwards.find(r => r.externalPort == packetData.l4.destPort);
+                    if (pfRule) {
+                        packetData.l3.destIp = pfRule.internalIp;
+                        packetData.l4.destPort = pfRule.internalPort;
+                    }
+                }
+            }
+        }
+
+        function getExternalInterface(router) {
+            for (const conn of state.connections) {
+                let neighborId = null;
+                if (conn.from === router.id) neighborId = conn.to;
+                if (conn.to === router.id) neighborId = conn.from;
+
+                if (neighborId) {
+                    const neighbor = findDevice(neighborId);
+                    if (neighbor && neighbor.type === 'isp') {
+                        const portId = conn.from === router.id ? conn.fromPort : conn.toPort;
+                        const ipConfig = router.portConfigs[portId]?.ipAddress;
+                        if (ipConfig) {
+                            return { ip: ipConfig.split('/')[0], port: portId };
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        // --- Event Log ---
+        function logEvent(message) {
+            state.eventLog.push(message);
+            updateEventLog();
+        }
+
+        function updateEventLog() {
+            dom.logContent.innerHTML = state.eventLog.join('<br>');
+            dom.logContent.scrollTop = dom.logContent.scrollHeight;
+        }
+
+    </script>
+</body>
+</html>
