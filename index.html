@@ -19,6 +19,12 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
+            -webkit-touch-callout: none; /* iOS Safari */
+            -webkit-user-select: none; /* Safari */
+            -khtml-user-select: none; /* Konqueror HTML */
+            -moz-user-select: none; /* Old versions of Firefox */
+            -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
         }
         body {
             font-family: 'Inter', sans-serif;
@@ -1319,15 +1325,25 @@
         }
 
 
-        async function animatePacketHop(startNode, endNode, type) {
+        async function animatePacketHop(startNode, endNode, type, isBroadcast = false) {
             const startX = startNode.x, startY = startNode.y;
             const endX = endNode.x, endY = endNode.y;
             const distance = Math.hypot(endX - startX, endY - startY);
             const steps = Math.max(1, distance / 10);
+            
+            let color = config.packetColors[type];
+            if(isBroadcast) {
+                const hex = color.replace('#', '');
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                color = `rgba(${r}, ${g}, ${b}, 0.25)`;
+            }
+
             for (let j = 0; j < steps; j++) {
                 await pauseCheck();
                 draw();
-                dom.ctx.fillStyle = config.packetColors[type];
+                dom.ctx.fillStyle = color;
                 dom.ctx.beginPath();
                 dom.ctx.arc(startX + j * (endX - startX) / steps, startY + j * (endY - startY) / steps, 8, 0, Math.PI * 2);
                 dom.ctx.fill();
