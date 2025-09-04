@@ -373,9 +373,9 @@
         /* --- Packet Inspection Panel --- */
         #packet-inspection-panel {
             position: absolute;
-            width: 30%;
-            min-width: 320px;
-            max-width: 400px; /* Capped max width */
+            width: 25%;
+            min-width: 280px;
+            max-width: 320px; /* Capped max width */
         }
         #packet-inspection-header {
              cursor: move;
@@ -503,7 +503,6 @@
                     <div id="packet-inspection-header" class="flex justify-between items-center p-2 bg-slate-800/90 rounded-t-lg">
                         <h4 class="font-bold">Packet Inspector</h4>
                         <span id="packet-at-device" class="text-slate-400"></span>
-                        <button id="close-packet-inspector-btn" class="px-2 py-1 hover:bg-slate-700 rounded"><i class="fa-solid fa-times"></i></button>
                     </div>
                     <div id="packet-inspection-body" class="p-3 space-y-2">
                         <!-- Layers will be dynamically inserted here -->
@@ -690,7 +689,6 @@
             packetInspectionHeader: document.getElementById('packet-inspection-header'),
             packetInspectionBody: document.getElementById('packet-inspection-body'),
             packetAtDevice: document.getElementById('packet-at-device'),
-            closePacketInspectorBtn: document.getElementById('close-packet-inspector-btn'),
             domainInputContainer: document.getElementById('domain-input-container'),
             domainInput: document.getElementById('domain-input'),
             runRipBtn: document.getElementById('run-rip-btn'),
@@ -797,12 +795,8 @@
             dom.runRipBtn.addEventListener('click', handleRipConvergence);
             makeModalDraggable(dom.modalContent, dom.modalHeader);
             makeModalDraggable(dom.ripExplanationModal, dom.ripModalHeader);
-            makeModalDraggable(dom.packetInspectionPanel, dom.packetInspectionHeader);
             dom.closeRipModalBtn.addEventListener('click', () => {
                 dom.ripExplanationModal.classList.add('hidden');
-            });
-            dom.closePacketInspectorBtn.addEventListener('click', () => {
-                dom.packetInspectionPanel.classList.add('hidden');
             });
             dom.trafficTypeSelect.addEventListener('change', handleTrafficTypeChange);
             
@@ -837,12 +831,6 @@
                 ...configData
             };
 
-            if (type.includes('switch')) {
-                delete newDevice.ipAddress;
-                delete newDevice.subnetMask;
-                delete newDevice.defaultGateway;
-            }
-
             if (type.includes('switch') && !configData.portConfigs) {
                 newDevice.portConfigs = {};
                 newDevice.vlans = [{ id: 1, name: 'Default' }];
@@ -860,7 +848,7 @@
                  delete newDevice.subnetMask;
                  delete newDevice.defaultGateway;
                  if (type === 'adv-router' || type === 'isp' || type === 'router') {
-                        newDevice.routingTable = [];
+                       newDevice.routingTable = [];
                  }
             }
             if (type === 'firewall' && !configData.rules) {
@@ -1421,7 +1409,7 @@
             state.isAnimating = false;
             state.isPaused = false;
             dom.pauseResumeBtn.disabled = true;
-            // dom.packetInspectionPanel.classList.add('hidden'); // Keep panel open after simulation
+            dom.packetInspectionPanel.classList.add('hidden');
             updatePauseResumeButton();
             draw();
             updateUI();
@@ -1434,7 +1422,7 @@
                 updatePauseResumeButton();
 
                 if (!state.isPaused && state.resolvePause) {
-                    // dom.packetInspectionPanel.classList.add('hidden'); // Keep panel open on resume
+                    dom.packetInspectionPanel.classList.add('hidden');
                     state.resolvePause();
                     state.resolvePause = null;
                 }
@@ -1731,14 +1719,14 @@
                         }
                     }
                 } else if (nextNode.type === 'distribution-switch' || nextNode.type === 'core-switch') {
-                                 const isRoutingHop = !areOnSameSubnet(findDevice(currentPath[0].id), findDevice(currentPath[currentPath.length - 1].id));
-                                 if(isRoutingHop) {
-                                     logEvent(`${nextNode.label}: <span class="l3">Performing L3 routing...</span>`);
-                                     const destVlan = findVlanForIpOnSwitch(nextNode, packetData.l3.destIp);
-                                     if (destVlan) {
-                                         packetData.vlanTag = destVlan.vlanId;
-                                     }
+                             const isRoutingHop = !areOnSameSubnet(findDevice(currentPath[0].id), findDevice(currentPath[currentPath.length - 1].id));
+                             if(isRoutingHop) {
+                                 logEvent(`${nextNode.label}: <span class="l3">Performing L3 routing...</span>`);
+                                 const destVlan = findVlanForIpOnSwitch(nextNode, packetData.l3.destIp);
+                                 if (destVlan) {
+                                     packetData.vlanTag = destVlan.vlanId;
                                  }
+                             }
                 }
 
                 if (currentNode.arpTable && nextNode.ipAddress) {
@@ -2016,9 +2004,9 @@
                  content += `<br><br><strong>MAC Table:</strong>`;
                  const macEntries = Object.entries(device.macTable);
                  if (macEntries.length > 0) {
-                      content += `<pre>${macEntries.map(([mac, port]) => `${mac} -> ${port}`).join('\n')}</pre>`;
+                     content += `<pre>${macEntries.map(([mac, port]) => `${mac} -> ${port}`).join('\n')}</pre>`;
                  } else {
-                      content += `<pre>Empty</pre>`;
+                     content += `<pre>Empty</pre>`;
                  }
             }
             if (device.stateTable && device.stateTable.length > 0) {
@@ -2065,10 +2053,10 @@
             dom.modalHeader.textContent = `Configure ${device.label}`;
             let body = `<div class="space-y-3 text-left">
                 <div><label class="font-semibold">Label:</label><input type="text" id="modal-label" class="modal-input" value="${device.label}"></div>
-                ${device.type !== 'firewall' && !device.type.includes('router') && device.type !== 'ngfw' && device.type !== 'isp' && !device.type.includes('switch') ? `
-                <div><label class="font-semibold">IP Address:</label><input type="text" id="modal-ip" class="modal-input" value="${device.ipAddress || ''}"></div>
-                <div><label class="font-semibold">Subnet Mask:</label><input type="text" id="modal-subnet" class="modal-input" value="${device.subnetMask || ''}"></div>
-                <div><label class="font-semibold">Default Gateway:</label><input type="text" id="modal-gateway" class="modal-input" value="${device.defaultGateway || ''}"></div>
+                ${device.type !== 'firewall' && !device.type.includes('router') && device.type !== 'ngfw' && device.type !== 'isp' ? `
+                <div><label class="font-semibold">IP Address:</label><input type="text" id="modal-ip" class="modal-input" value="${device.ipAddress}"></div>
+                <div><label class="font-semibold">Subnet Mask:</label><input type="text" id="modal-subnet" class="modal-input" value="${device.subnetMask}"></div>
+                <div><label class="font-semibold">Default Gateway:</label><input type="text" id="modal-gateway" class="modal-input" value="${device.defaultGateway}"></div>
                 ` : ''}
                 ${(device.type === 'pc' || device.type === 'laptop') ? `
                 <div><label class="font-semibold">DNS Server:</label><input type="text" id="modal-dns" class="modal-input" value="${device.dnsServerIp || ''}"></div>
@@ -2141,10 +2129,10 @@
                                          <h4 class="font-semibold mb-2">VLAN Configuration</h4>
                                          <div id="vlan-list" class="mb-2"></div>
                                          <div class="flex gap-2">
-                                              <input type="number" id="vlan-id" placeholder="ID" class="modal-input w-1/4">
-                                              <input type="text" id="vlan-name" placeholder="Name" class="modal-input w-1/2">
-                                              ${(device.vlanInterfaces) ? '<input type="text" id="vlan-ip" placeholder="SVI IP/Mask" class="modal-input w-1/2">' : ''}
-                                              <button id="add-vlan-btn" class="control-button primary px-3"><i class="fa-solid fa-plus"></i></button>
+                                             <input type="number" id="vlan-id" placeholder="ID" class="modal-input w-1/4">
+                                             <input type="text" id="vlan-name" placeholder="Name" class="modal-input w-1/2">
+                                             ${(device.vlanInterfaces) ? '<input type="text" id="vlan-ip" placeholder="SVI IP/Mask" class="modal-input w-1/2">' : ''}
+                                             <button id="add-vlan-btn" class="control-button primary px-3"><i class="fa-solid fa-plus"></i></button>
                                          </div>
                 </div>`;
             }
@@ -2172,8 +2160,8 @@
                      <div>
                          <label class="font-semibold">Security:</label>
                          <select id="modal-security-type" class="modal-input mt-1">
-                              <option value="Open" ${device.securityType === 'Open' ? 'selected' : ''}>Open</option>
-                              <option value="WPA2-PSK" ${device.securityType === 'WPA2-PSK' ? 'selected' : ''}>WPA2-PSK (Password)</option>
+                             <option value="Open" ${device.securityType === 'Open' ? 'selected' : ''}>Open</option>
+                             <option value="WPA2-PSK" ${device.securityType === 'WPA2-PSK' ? 'selected' : ''}>WPA2-PSK (Password)</option>
                          </select>
                      </div>
                       <div id="password-field-container" style="display: ${device.securityType === 'WPA2-PSK' ? 'block' : 'none'};">
@@ -2314,10 +2302,10 @@
                     }
                 }
                  if (device.type === 'server') {
-                        device.services = [];
-                        document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
-                            device.services.push(cb.value);
-                        });
+                       device.services = [];
+                       document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+                           device.services.push(cb.value);
+                       });
                 }
                 if (device.type === 'firewall') {
                     device.portConfigs.ETH0.ipAddress = document.getElementById('fw-eth0').value;
@@ -3780,5 +3768,4 @@
     </script>
 </body>
 </html>
-
 
